@@ -30,3 +30,20 @@ describe('archivos de idioma', () => {
     expect(t('game.title')).toBe(en['game.title']);
   });
 });
+
+describe('sustitución de valores', () => {
+  it('cambia {nombre} por su valor', () => {
+    setLanguage('es');
+    expect(t('hud.round', { round: 7 })).toBe('Ronda 7');
+    setLanguage('en');
+    expect(t('prompt.openDoor', { cost: 750 })).toBe('E · open the hatch · 750');
+  });
+
+  it('todas las armas de weapons.json tienen nombre en los dos idiomas', async () => {
+    const weapons = (await import('../../shared/data/weapons.json')).default;
+    for (const id of Object.keys(weapons)) {
+      expect(en).toHaveProperty(`weapon.${id}`);
+      expect(es).toHaveProperty(`weapon.${id}`);
+    }
+  });
+});

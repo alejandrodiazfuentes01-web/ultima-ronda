@@ -8,12 +8,59 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="hud">
-      <div id="title"></div>
-      <div id="phase"></div>
-      <div id="renderer"></div>
+
+    <div id="hud" hidden>
+      <div id="hud-round"></div>
+      <div id="hud-crosshair"></div>
+      <div id="hud-hitmarker"></div>
+      <div id="hud-prompt" hidden></div>
+      <div id="hud-points">
+        <div id="hud-floats"></div>
+        <div id="hud-points-value"></div>
+      </div>
+      <div id="hud-weapon-box">
+        <div id="hud-status"></div>
+        <div id="hud-ammo"></div>
+        <div id="hud-weapon"></div>
+      </div>
+      <div id="hud-damage"></div>
     </div>
-    <div id="error" hidden></div>
+
+    <div id="perf"></div>
+
+    <div id="menu" class="overlay">
+      <h1 data-text="game.title"></h1>
+      <p class="sub" data-text="build.phase"></p>
+      <button id="play" data-text="menu.loading" disabled></button>
+      <div class="controls">
+        <h2 data-text="controls.title"></h2>
+        <ul>
+          <li data-text="controls.move"></li>
+          <li data-text="controls.look"></li>
+          <li data-text="controls.sprint"></li>
+          <li data-text="controls.jump"></li>
+          <li data-text="controls.reload"></li>
+          <li data-text="controls.use"></li>
+          <li data-text="controls.melee"></li>
+          <li data-text="controls.switch"></li>
+          <li data-text="controls.pause"></li>
+        </ul>
+      </div>
+      <p id="menu-error" class="error" hidden></p>
+    </div>
+
+    <div id="pause" class="overlay" hidden>
+      <h1 data-text="pause.title"></h1>
+      <button id="resume" data-text="pause.resume"></button>
+    </div>
+
+    <div id="over" class="overlay" hidden>
+      <h1 data-text="over.title"></h1>
+      <p id="over-round" class="sub"></p>
+      <button id="again" data-text="over.again"></button>
+    </div>
+
+    <div id="error" class="overlay" hidden></div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

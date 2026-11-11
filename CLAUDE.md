@@ -88,5 +88,7 @@ Mantén esta sección al día. Requieren Node 22 o posterior y `npm install` la 
 npm run dev        servidor de desarrollo (http://localhost:5173)
 npm run build      comprueba tipos, genera dist/ y falla si supera el presupuesto de descarga
 npm run preview    sirve el build de dist/ (http://localhost:4173)
-npm test           pruebas
+npm test           pruebas, incluido el jugador automático de 30 rondas (unos 40 s)
 ```
+
+Para medir el renderizador: el contador de arriba a la izquierda muestra fotogramas, el 1 % más lento, llamadas de dibujo, triángulos y el renderizador en uso. Añadir `?renderer=webgl` a la dirección fuerza WebGL 2.

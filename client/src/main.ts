@@ -1,95 +1,156 @@
 /**
- * Fase 0: un cubo girando. Sirve para comprobar el build, el despliegue y
- * el renderizador. El giro avanza en la simulación de paso fijo (60 Hz) y el
- * render interpola entre el paso anterior y el actual (regla 2).
+ * Arranque y bucle principal. La simulación avanza a paso fijo de 60 Hz y
+ * el render interpola entre pasos (regla 2).
+ *
+ * Estados: cargando → menú → jugando ⇄ pausa → fin de partida → jugando.
  */
 import * as THREE from 'three/webgpu';
-import { FixedStepper, SIM_DT } from '../../shared/sim/fixedStep';
-import { detectLanguage, setLanguage, t } from './i18n';
+import { loadConfig } from '../../shared/config';
+import { FixedStepper } from '../../shared/sim/fixedStep';
+import { Game } from '../../shared/sim/game';
+import { initSim } from '../../shared/sim/libs';
+import { Hud } from './hud';
+import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
+import { Input } from './input';
+import { PerfMeter } from './perf';
+import { GameView } from './render';
 
-// Velocidad de giro del cubo de prueba (radianes por segundo). No es un valor de balance.
-const SPIN_SPEED = 0.8;
+type State = 'loading' | 'menu' | 'playing' | 'paused' | 'over';
 
-function text(id: string, value: string): void {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
+function el<T extends HTMLElement = HTMLElement>(id: string): T {
+  const e = document.getElementById(id);
+  if (!e) throw new Error(`Falta el elemento #${id}`);
+  return e as T;
+}
+
+function applyTexts(): void {
+  document.title = t('game.title');
+  for (const node of document.querySelectorAll<HTMLElement>('[data-text]')) {
+    node.textContent = t(node.dataset.text as TextKey);
+  }
 }
 
 function showError(): void {
-  const el = document.getElementById('error');
-  if (!el) return;
-  el.textContent = t('error.noGraphics');
-  el.hidden = false;
+  const e = el('error');
+  e.textContent = t('error.noGraphics');
+  e.hidden = false;
 }
 
 async function start(): Promise<void> {
   const lang = detectLanguage(navigator.languages ?? [navigator.language]);
   setLanguage(lang);
   document.documentElement.lang = lang;
-  document.title = t('game.title');
-  text('title', t('game.title'));
-  text('phase', t('build.phase'));
+  applyTexts();
 
-  const canvas = document.getElementById('game');
-  if (!(canvas instanceof HTMLCanvasElement)) return;
-
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
+  const canvas = el<HTMLCanvasElement>('game');
+  const forceWebGL = new URLSearchParams(location.search).get('renderer') === 'webgl';
+  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
-  await renderer.init();
 
+  const cfg = loadConfig();
+  await Promise.all([renderer.init(), initSim()]);
   const usingWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
-  text('renderer', t(usingWebGPU ? 'renderer.webgpu' : 'renderer.webgl2'));
+  const perf = new PerfMeter(el('perf'), t(usingWebGPU ? 'renderer.webgpu' : 'renderer.webgl2'));
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0d1014);
-  scene.fog = new THREE.Fog(0x0d1014, 4, 12);
-
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50);
-  camera.position.set(0, 1.2, 4);
-  camera.lookAt(0, 0, 0);
-
-  scene.add(new THREE.HemisphereLight(0xbfd4e6, 0x1a1410, 0.6));
-  const sun = new THREE.DirectionalLight(0xffe6c4, 2.2);
-  sun.position.set(3, 5, 2);
-  scene.add(sun);
-
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(1.4, 1.4, 1.4),
-    new THREE.MeshStandardMaterial({ color: 0x8a96a3, roughness: 0.7, metalness: 0.1 }),
-  );
-  scene.add(cube);
-
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.MeshStandardMaterial({ color: 0x2a2f35, roughness: 1 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -1.2;
-  scene.add(floor);
-
-  // Estado de la simulación: ángulo actual y el del paso anterior, para interpolar.
-  let angle = 0;
-  let previousAngle = 0;
-  const stepper = new FixedStepper();
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+  const view = new GameView(cfg.map, cfg.rounds.aliveCap.max);
+  const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
+    view.resize(window.innerWidth, window.innerHeight);
+  };
+  resize();
+  window.addEventListener('resize', resize);
+
+  const input = new Input(canvas);
+  const hud = new Hud();
+  const stepper = new FixedStepper();
+  let game: Game | null = null;
+  let state: State = 'loading';
+
+  const menu = el('menu');
+  const pause = el('pause');
+  const over = el('over');
+  const menuError = el('menu-error');
+  const playButton = el<HTMLButtonElement>('play');
+
+  const setState = (s: State) => {
+    state = s;
+    menu.hidden = s !== 'menu' && s !== 'loading';
+    pause.hidden = s !== 'paused';
+    over.hidden = s !== 'over';
+    hud.show(s === 'playing' || s === 'paused');
+  };
+
+  const capture = async () => {
+    menuError.hidden = true;
+    try {
+      await input.lock();
+    } catch {
+      // Chrome no deja recapturar el ratón justo después de soltarlo: se reintenta con otro clic.
+      menuError.textContent = t('error.pointerLock');
+      menuError.hidden = false;
+    }
+  };
+
+  const newGame = async () => {
+    game?.free();
+    game = new Game(cfg, { seed: (Math.random() * 2 ** 31) | 0 });
+    // Solo en el servidor de desarrollo: acceso a la partida para pruebas automáticas. No existe en el build publicado.
+    if (import.meta.env.DEV) (window as unknown as { __game?: Game }).__game = game;
+    input.setView(game.player.yaw, 0);
+    input.releaseAll();
+    hud.reset();
+    await capture();
+    if (input.locked) setState('playing');
+    else setState(state === 'over' ? 'over' : 'menu');
+  };
+
+  playButton.addEventListener('click', () => void newGame());
+  el('again').addEventListener('click', () => void newGame());
+  el('resume').addEventListener('click', () => void capture());
+
+  document.addEventListener('pointerlockchange', () => {
+    if (input.locked) {
+      if (state === 'paused' || state === 'menu') setState('playing');
+    } else {
+      input.releaseAll();
+      if (state === 'playing') setState('paused');
+    }
   });
+
+  playButton.textContent = t('menu.play');
+  playButton.disabled = false;
+  setState('menu');
 
   let last = performance.now();
   renderer.setAnimationLoop((now: number) => {
-    const frameSeconds = (now - last) / 1000;
+    const frameSeconds = Math.min((now - last) / 1000, 0.25);
     last = now;
-    const alpha = stepper.advance(frameSeconds, () => {
-      previousAngle = angle;
-      angle += SPIN_SPEED * SIM_DT;
-    });
-    const shown = previousAngle + (angle - previousAngle) * alpha;
-    cube.rotation.set(shown * 0.6, shown, 0);
-    renderer.render(scene, camera);
+    let alpha = 1;
+
+    if (game && state === 'playing') {
+      const g = game;
+      alpha = stepper.advance(frameSeconds, () => {
+        g.step(input.next());
+        for (const ev of g.events) {
+          hud.onEvent(ev);
+          view.onEvent(ev);
+          if (ev.type === 'gameOver') {
+            el('over-round').textContent = t('over.round', { round: ev.round });
+            setState('over');
+            input.unlock();
+          }
+        }
+      });
+    }
+
+    if (game) {
+      view.update(game, alpha, input.yaw, input.pitch, state === 'playing' ? frameSeconds : 0);
+      hud.update(game, frameSeconds);
+    }
+    renderer.render(view.scene, view.camera);
+    const info = renderer.info.render as { drawCalls?: number; calls?: number; triangles?: number };
+    perf.frame(frameSeconds, info.drawCalls ?? info.calls ?? 0, info.triangles ?? 0);
   });
 }
 

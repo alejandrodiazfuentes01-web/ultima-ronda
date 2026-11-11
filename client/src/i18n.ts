@@ -26,6 +26,24 @@ export function setLanguage(lang: Language): void {
   current = lang;
 }
 
-export function t(key: TextKey): string {
-  return TABLES[current][key];
+export function getLanguage(): Language {
+  return current;
+}
+
+/** Texto del idioma activo. Las marcas {nombre} se sustituyen por los valores dados. */
+export function t(key: TextKey, vars?: Record<string, string | number>): string {
+  let s = TABLES[current][key];
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
+
+/** Número con separador de miles del idioma activo. */
+export function formatNumber(n: number): string {
+  return Math.round(n).toLocaleString(current === 'es' ? 'es-ES' : 'en-US');
+}
+
+/** Nombre visible de un arma, o su identificador si falta en el archivo de idioma. */
+export function weaponName(id: string): string {
+  const key = `weapon.${id}` as TextKey;
+  return key in TABLES[current] ? t(key) : id;
 }

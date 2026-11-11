@@ -9,6 +9,6 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     // El límite real lo vigila scripts/check-budget.mjs (15 MB iniciales).
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 8000,
   },
 });
