@@ -7,6 +7,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Box, Point2 } from '../../shared/config';
 
 const cache = new Map<string, THREE.Object3D>();
+const clips = new Map<string, THREE.AnimationClip[]>();
 
 /** Carga los modelos indicados. Devuelve los que no se pudieron cargar. */
 export async function loadModels(names: Iterable<string>): Promise<string[]> {
@@ -18,6 +19,7 @@ export async function loadModels(names: Iterable<string>): Promise<string[]> {
         // Ruta relativa (regla 9).
         const gltf = await loader.loadAsync(`./models/${name}.glb`);
         cache.set(name, gltf.scene);
+        clips.set(name, gltf.animations);
       } catch (err) {
         console.warn(`No se pudo cargar el modelo ${name}`, err);
         failed.push(name);
@@ -60,4 +62,10 @@ export function placeModel(name: string | null, box: Box, facing: Point2, fallba
   tmpBox.getCenter(tmpCenter);
   model.position.set((x0 + x1) / 2 - tmpCenter.x, y0 - tmpBox.min.y, (z0 + z1) / 2 - tmpCenter.z);
   return model;
+}
+
+/** El modelo original cargado (para clonarlo con su esqueleto) y sus animaciones. */
+export function getModel(name: string): { scene: THREE.Object3D; animations: THREE.AnimationClip[] } | null {
+  const scene = cache.get(name);
+  return scene ? { scene, animations: clips.get(name) ?? [] } : null;
 }

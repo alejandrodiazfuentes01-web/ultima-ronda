@@ -9,6 +9,7 @@ import type { Box, MapConfig } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { EYE_HEIGHT } from '../../shared/sim/physics';
 import type { SimEvent } from '../../shared/sim/types';
+import { EnemyViews } from './enemies';
 import { Effects } from './effects';
 import { Props } from './props';
 import { labFloorTexture, labWallTexture } from './textures';
@@ -114,8 +115,7 @@ export class GameView {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
   private readonly viewmodel: Viewmodel;
-  private readonly enemyBodies: THREE.InstancedMesh;
-  private readonly enemyHeads: THREE.InstancedMesh;
+  private readonly enemyViews: EnemyViews;
   private readonly planks: THREE.InstancedMesh;
   private readonly plankMatrices: THREE.Matrix4[] = [];
   private readonly doors: THREE.Mesh[] = [];
@@ -215,20 +215,8 @@ export class GameView {
     this.planks.frustumCulled = false;
     this.scene.add(this.planks);
 
-    // Enemigos: cuerpo y cabeza, reserva fija.
-    const bodyGeo = new THREE.CapsuleGeometry(0.28, 0.95, 4, 10);
-    bodyGeo.translate(0, 0.28 + 0.95 / 2 + 0.05, 0);
-    this.enemyBodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ color: COLORS.enemy, roughness: 0.85 }), poolSize);
-    const headGeo = new THREE.SphereGeometry(0.17, 12, 8);
-    headGeo.translate(0, 1.6, 0);
-    this.enemyHeads = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({ color: COLORS.enemyHead, roughness: 0.8 }), poolSize);
-    for (let i = 0; i < poolSize; i++) {
-      this.enemyBodies.setMatrixAt(i, hidden);
-      this.enemyHeads.setMatrixAt(i, hidden);
-    }
-    this.enemyBodies.frustumCulled = false;
-    this.enemyHeads.frustumCulled = false;
-    this.scene.add(this.enemyBodies, this.enemyHeads);
+    // Enemigos: reserva fija de Vacíos animados.
+    this.enemyViews = new EnemyViews(this.scene, poolSize);
 
     this.viewmodel = new Viewmodel(this.camera);
     this.props = new Props(this.scene, map);
@@ -242,6 +230,7 @@ export class GameView {
 
   onEvent(ev: SimEvent, game: Game): void {
     this.viewmodel.onEvent(ev);
+    this.enemyViews.onEvent(ev);
     this.effects.onEvent(ev, game);
   }
 
@@ -254,21 +243,7 @@ export class GameView {
     this.camera.position.set(lerp(p.prevPos.x, p.pos.x), lerp(p.prevPos.y, p.pos.y) + eye, lerp(p.prevPos.z, p.pos.z));
     this.camera.rotation.set(pitch, yaw, 0);
 
-    for (const e of game.enemies) {
-      if (e.phase === 'inactive') {
-        this.enemyBodies.setMatrixAt(e.index, hidden);
-        this.enemyHeads.setMatrixAt(e.index, hidden);
-        continue;
-      }
-      tmpPos.set(lerp(e.prevPos.x, e.pos.x), lerp(e.prevPos.y, e.pos.y), lerp(e.prevPos.z, e.pos.z));
-      tmpQuat.setFromAxisAngle(yAxis, e.yaw);
-      tmpScale.set(1, 1, 1);
-      tmpMatrix.compose(tmpPos, tmpQuat, tmpScale);
-      this.enemyBodies.setMatrixAt(e.index, tmpMatrix);
-      this.enemyHeads.setMatrixAt(e.index, tmpMatrix);
-    }
-    this.enemyBodies.instanceMatrix.needsUpdate = true;
-    this.enemyHeads.instanceMatrix.needsUpdate = true;
+    this.enemyViews.update(game, alpha, frameSeconds);
 
     for (let w = 0; w < game.windows.length; w++) {
       const planks = game.windows[w]!.planks;

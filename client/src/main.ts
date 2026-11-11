@@ -12,6 +12,7 @@ import { initSim } from '../../shared/sim/libs';
 import { AudioEngine } from './audio/engine';
 import { Hud } from './hud';
 import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
+import { ENEMY_MODEL } from './enemies';
 import { Input } from './input';
 import { loadModels } from './models';
 import { PerfMeter } from './perf';
@@ -61,7 +62,7 @@ async function start(): Promise<void> {
   const modelNames = [m.powerSwitch, ...m.perkStations, m.forja, ...m.contenedorSpots, ...m.decor]
     .map((f) => f.model)
     .filter((n): n is string => !!n);
-  await loadModels(modelNames);
+  await loadModels([...modelNames, ENEMY_MODEL]);
   const view = new GameView(cfg.map, cfg.rounds.aliveCap.max);
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
