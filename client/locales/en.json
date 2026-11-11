@@ -58,5 +58,9 @@
   "powerup.ondaExpansiva": "Onda expansiva",
   "hud.effect": "{name} {seconds}",
   "downed.title": "Down",
-  "downed.timer": "Segundo aliento: back up in {seconds} · {left} left"
+  "downed.timer": "Segundo aliento: back up in {seconds} · {left} left",
+  "tutorial.shoot": "Left click to shoot the Hollows. Every hit earns points.",
+  "tutorial.repair": "Hold E next to a window to bolt its plates back on.",
+  "tutorial.buyWeapon": "You have the points: buy the SMG-5 from the green locker.",
+  "tutorial.openDoor": "Open the orange hatch to reach the Laboratory."
 }

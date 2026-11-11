@@ -287,6 +287,28 @@ body {
   font-size: 16px;
 }
 
+#hud-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 31%;
+  transform: translateX(-50%);
+  max-width: min(90vw, 560px);
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  font-size: 15px;
+  text-align: center;
+  animation: hint-in 0.3s ease-out;
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
 /* ---------- Medidor de rendimiento ---------- */
 
 #perf {

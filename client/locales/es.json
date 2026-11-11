@@ -58,5 +58,9 @@
   "powerup.ondaExpansiva": "Onda expansiva",
   "hud.effect": "{name} {seconds}",
   "downed.title": "Caído",
-  "downed.timer": "Segundo aliento: te levantas en {seconds} · quedan {left}"
+  "downed.timer": "Segundo aliento: te levantas en {seconds} · quedan {left}",
+  "tutorial.shoot": "Clic izquierdo para disparar a los Vacíos. Cada impacto da puntos.",
+  "tutorial.repair": "Mantén E junto a una ventana para volver a atornillar sus planchas.",
+  "tutorial.buyWeapon": "Ya tienes puntos: compra el SMG-5 en la taquilla verde.",
+  "tutorial.openDoor": "Abre la compuerta naranja para llegar al Laboratorio."
 }

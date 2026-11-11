@@ -68,6 +68,8 @@ export class Hud {
   private readonly hitmarker = el('hud-hitmarker');
   private readonly damage = el('hud-damage');
   private readonly banner = el('hud-banner');
+  private readonly hint = el('hud-hint');
+  private lastHint: string | null = null;
   private readonly effects = el('hud-effects');
   private readonly perks = el('hud-perks');
   private readonly downed = el('hud-downed');
@@ -97,6 +99,7 @@ export class Hud {
     this.deniedTimer = 0;
     for (const f of this.floats) f.classList.remove('rise');
     this.damage.style.opacity = '0';
+    this.setHint(null);
   }
 
   onEvent(ev: SimEvent): void {
@@ -134,6 +137,15 @@ export class Hud {
       default:
         break;
     }
+  }
+
+  /** Aviso del tutorial, o null para ocultarlo. */
+  setHint(text: string | null): void {
+    if (text === this.lastHint) return;
+    this.lastHint = text;
+    this.hint.hidden = text === null;
+    // Al pasar de oculto a visible, el CSS repite su animación de entrada.
+    if (text !== null) this.hint.textContent = text;
   }
 
   private showBanner(text: string): void {

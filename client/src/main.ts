@@ -15,6 +15,7 @@ import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
 import { Input } from './input';
 import { loadModels } from './models';
 import { PerfMeter } from './perf';
+import { Tutorial, type TutorialView } from './tutorial';
 import { GameView } from './render';
 
 type State = 'loading' | 'menu' | 'playing' | 'paused' | 'over';
@@ -72,6 +73,21 @@ async function start(): Promise<void> {
   const input = new Input(canvas);
   const hud = new Hud();
   const audio = new AudioEngine();
+  const tutorial = new Tutorial();
+  /** Distancia a la que se sugiere reparar una ventana rota. */
+  const REPAIR_HINT_DISTANCE = 6;
+  const tutorialView = (g: Game): TutorialView => {
+    const p = g.player;
+    const map = g.cfg.map;
+    return {
+      enemiesAround: g.round.alive > 0,
+      brokenWindowNear: map.windows.some(
+        (w, i) => g.windows[i]!.active && g.windows[i]!.planks < map.planksPerWindow && Math.hypot(w.inside[0] - p.pos.x, w.inside[1] - p.pos.z) < REPAIR_HINT_DISTANCE,
+      ),
+      canAffordWallWeapon: map.wallBuys.some((b) => p.points >= b.cost && !p.slots.some((s) => s?.weapon === b.weapon)),
+      canAffordDoor: map.doors.some((d, i) => !g.doors[i]!.open && p.points >= d.cost),
+    };
+  };
   const stepper = new FixedStepper();
   let game: Game | null = null;
   let state: State = 'loading';
@@ -153,6 +169,7 @@ async function start(): Promise<void> {
           hud.onEvent(ev);
           view.onEvent(ev, g);
           audio.onEvent(ev, g);
+          tutorial.onEvent(ev);
           if (ev.type === 'gameOver') {
             el('over-round').textContent = t('over.round', { round: ev.round });
             setState('over');
@@ -165,6 +182,8 @@ async function start(): Promise<void> {
     if (game) {
       view.update(game, alpha, input.yaw, input.pitch, state === 'playing' ? frameSeconds : 0);
       hud.update(game, frameSeconds);
+      const step = state === 'playing' && !game.player.downed ? tutorial.current(tutorialView(game)) : null;
+      hud.setHint(step ? t(`tutorial.${step}` as TextKey) : null);
       if (state === 'playing') audio.update(game, view.camera.position, input.yaw);
     }
     renderer.render(view.scene, view.camera);
