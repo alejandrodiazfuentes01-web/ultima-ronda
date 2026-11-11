@@ -57,7 +57,7 @@ export type SimEvent =
   | { type: 'denied'; cost: number }
   | { type: 'roundStart'; round: number }
   | { type: 'roundEnd'; round: number }
-  | { type: 'playerHit'; health: number }
+  | { type: 'playerHit'; health: number; enemy: number }
   | { type: 'plankTorn'; window: number }
   | { type: 'plankRepaired'; window: number }
   | { type: 'enemySpawned'; enemy: number }

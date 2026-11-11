@@ -166,7 +166,8 @@ export class Game {
   // ------------------------------------------------------------------ paso
 
   step(input: PlayerInput): void {
-    this.events.length = 0;
+    // Los eventos del arranque (empieza la ronda 1) se conservan hasta después del primer paso.
+    if (this.tick > 0) this.events.length = 0;
     if (this.round.phase === 'over') return;
     this.tick++;
 
@@ -476,12 +477,12 @@ export class Game {
     this.events.push({ type: 'points', amount: n });
   }
 
-  private hurtPlayer(): void {
+  private hurtPlayer(enemy: number): void {
     const p = this.player;
     if (!p.alive || this.opts.invulnerable) return;
     p.health = Math.max(0, p.health - this.cfg.enemies.hitDamage);
     p.sinceDamage = 0;
-    this.events.push({ type: 'playerHit', health: p.health });
+    this.events.push({ type: 'playerHit', health: p.health, enemy });
     if (p.health <= 0) {
       p.alive = false;
       this.round.phase = 'over';
@@ -649,7 +650,7 @@ export class Game {
         e.attackTimer -= SIM_DT;
         if (e.attackTimer <= 0) {
           e.attackTimer = ec.attackIntervalSeconds;
-          this.hurtPlayer();
+          this.hurtPlayer(e.index);
           if (this.round.phase === 'over') return;
         }
       } else {

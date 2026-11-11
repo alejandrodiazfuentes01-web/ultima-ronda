@@ -55,6 +55,13 @@ describe('inicio de partida', () => {
     expect(g.player.health).toBe(100);
   });
 
+  it('el aviso de que empieza la ronda 1 llega a quien lee el primer paso', () => {
+    const g = newGame({ autoRounds: true });
+    const ev = run(g, 1);
+    expect(ev).toContainEqual({ type: 'roundStart', round: 1 });
+    expect(run(g, 1)).not.toContainEqual({ type: 'roundStart', round: 1 });
+  });
+
   it('la ronda 1 trae 8 enemigos, uno cada 2 segundos', () => {
     const g = newGame({ autoRounds: true });
     expect(g.round.number).toBe(1);
