@@ -48,18 +48,19 @@ function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
 const PLANK_WIDTH = 0.15;
 
 /**
- * Disposición propia de las planchas de una ventana: un marco de cuatro y una
- * cruzada en diagonal, con el centro despejado para ver quién viene.
- * El orden es el de reparación; los enemigos las arrancan al revés: primero la
- * diagonal del centro, luego los laterales y al final las de arriba y abajo.
+ * Disposición propia de las planchas de una ventana: una reja. Dos verticales
+ * al fondo y tres horizontales cruzadas por delante, agrupadas en la franja
+ * central, con huecos a los lados, arriba y abajo para ver quién viene.
+ * El orden es el de reparación; los enemigos las arrancan al revés: primero las
+ * horizontales de delante y al final las dos verticales.
  * place = [posición a lo ancho (-1 a 1), altura (0 a 1), giro, capa].
  */
 const PLANK_LAYOUT: Array<{ place: [number, number, number, number]; length: (w: number, h: number) => number }> = [
-  { place: [0, 0.1, 0.03, 0], length: (w) => w + 0.3 },
-  { place: [0, 0.9, -0.04, 0], length: (w) => w + 0.3 },
-  { place: [-0.74, 0.5, Math.PI / 2 + 0.06, 1], length: (_w, h) => h + 0.25 },
-  { place: [0.74, 0.5, Math.PI / 2 - 0.05, 1], length: (_w, h) => h + 0.25 },
-  { place: [0, 0.5, 0.5, 2], length: (w, h) => Math.hypot(w, h) * 0.92 },
+  { place: [-0.36, 0.5, Math.PI / 2 - 0.07, 0], length: (_w, h) => h + 0.25 },
+  { place: [0.4, 0.5, Math.PI / 2 + 0.05, 0], length: (_w, h) => h + 0.25 },
+  { place: [0, 0.3, -0.05, 1], length: (w) => w + 0.3 },
+  { place: [0, 0.72, 0.04, 1], length: (w) => w + 0.3 },
+  { place: [0.03, 0.52, 0.13, 2], length: (w) => w + 0.2 },
 ];
 
 const tmpMatrix = new THREE.Matrix4();

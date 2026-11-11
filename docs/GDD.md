@@ -159,7 +159,7 @@ Valores de partida que el resto del documento no fijaba, aprobados al empezar la
 | Recompra de munición | Llena cargador y reserva |
 | Cuerpo a cuerpo | 150 de daño, alcance 1,8 m, uno cada 0,8 s |
 | Golpe del enemigo | Uno cada 1,2 s, alcance 1,4 m |
-| Barricadas | 5 planchas por ventana; el enemigo arranca una cada 1,5 s; reparar una cuesta 1 s manteniendo la tecla de usar. Disposición propia: un marco de cuatro planchas metálicas (abajo, arriba y dos laterales) y una cruzada en diagonal, con el centro despejado para ver quién viene. Se arrancan en este orden: diagonal, lateral derecho, lateral izquierdo, superior e inferior; se reponen al revés |
+| Barricadas | 5 planchas por ventana; el enemigo arranca una cada 1,5 s; reparar una cuesta 1 s manteniendo la tecla de usar. Disposición propia, en reja: dos planchas metálicas verticales al fondo y tres horizontales cruzadas por delante, agrupadas en la franja central, con huecos a los lados, arriba y abajo para ver quién viene. Se arrancan primero las tres horizontales (la del medio, la de arriba y la de abajo) y al final las dos verticales; se reponen al revés |
 | Tope de puntos por reparar | 500 por ronda |
 | Extremidades | Daño × 1 |
 | Salto | 0,9 m |
