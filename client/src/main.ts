@@ -9,6 +9,7 @@ import { loadConfig } from '../../shared/config';
 import { FixedStepper } from '../../shared/sim/fixedStep';
 import { Game } from '../../shared/sim/game';
 import { initSim } from '../../shared/sim/libs';
+import { AudioEngine } from './audio/engine';
 import { Hud } from './hud';
 import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
 import { Input } from './input';
@@ -63,6 +64,7 @@ async function start(): Promise<void> {
 
   const input = new Input(canvas);
   const hud = new Hud();
+  const audio = new AudioEngine();
   const stepper = new FixedStepper();
   let game: Game | null = null;
   let state: State = 'loading';
@@ -93,10 +95,12 @@ async function start(): Promise<void> {
   };
 
   const newGame = async () => {
+    // El navegador solo deja sonar audio tras un clic: se arranca aquí, al pulsar Jugar.
+    audio.start();
     game?.free();
     game = new Game(cfg, { seed: (Math.random() * 2 ** 31) | 0 });
     // Solo en el servidor de desarrollo: acceso a la partida para pruebas automáticas. No existe en el build publicado.
-    if (import.meta.env.DEV) (window as unknown as { __game?: Game }).__game = game;
+    if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio });
     input.setView(game.player.yaw, 0);
     input.releaseAll();
     hud.reset();
@@ -107,14 +111,20 @@ async function start(): Promise<void> {
 
   playButton.addEventListener('click', () => void newGame());
   el('again').addEventListener('click', () => void newGame());
-  el('resume').addEventListener('click', () => void capture());
+  el('resume').addEventListener('click', () => {
+    audio.start();
+    void capture();
+  });
 
   document.addEventListener('pointerlockchange', () => {
     if (input.locked) {
       if (state === 'paused' || state === 'menu') setState('playing');
     } else {
       input.releaseAll();
-      if (state === 'playing') setState('paused');
+      if (state === 'playing') {
+        setState('paused');
+        audio.suspend();
+      }
     }
   });
 
@@ -135,6 +145,7 @@ async function start(): Promise<void> {
         for (const ev of g.events) {
           hud.onEvent(ev);
           view.onEvent(ev);
+          audio.onEvent(ev, g);
           if (ev.type === 'gameOver') {
             el('over-round').textContent = t('over.round', { round: ev.round });
             setState('over');
@@ -147,6 +158,7 @@ async function start(): Promise<void> {
     if (game) {
       view.update(game, alpha, input.yaw, input.pitch, state === 'playing' ? frameSeconds : 0);
       hud.update(game, frameSeconds);
+      if (state === 'playing') audio.update(game, view.camera.position, input.yaw);
     }
     renderer.render(view.scene, view.camera);
     const info = renderer.info.render as { drawCalls?: number; calls?: number; triangles?: number };
