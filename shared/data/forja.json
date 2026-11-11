@@ -1,0 +1,13 @@
+{
+  "cost": 5000,
+  "repeatCost": 2500,
+  "seconds": 5,
+  "needsPower": true,
+  "damageMultiplier": 2,
+  "magazineMultiplier": 1.5,
+  "reserveMultiplier": 1.5,
+  "ashWave": {
+    "radius": 3,
+    "roundHealthFraction": 0.5
+  }
+}

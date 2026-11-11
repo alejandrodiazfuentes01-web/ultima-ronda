@@ -1,0 +1,15 @@
+{
+  "dropChance": 0.02,
+  "maxPerRound": 4,
+  "pickupRadius": 1.3,
+  "lifetimeSeconds": 30,
+  "blinkSeconds": 5,
+  "effectSeconds": 30,
+  "nukePoints": 400,
+  "kinds": [
+    "municionCompleta",
+    "bajaInstantanea",
+    "puntosDobles",
+    "ondaExpansiva"
+  ]
+}

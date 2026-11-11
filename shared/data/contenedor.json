@@ -1,0 +1,15 @@
+{
+  "cost": 950,
+  "spinSeconds": 4,
+  "offerSeconds": 10,
+  "movesAfterMin": 4,
+  "movesAfterMax": 8,
+  "moveSeconds": 15,
+  "pool": [
+    "smg5",
+    "mk17",
+    "m249",
+    "svd",
+    "arco"
+  ]
+}

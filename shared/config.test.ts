@@ -52,4 +52,34 @@ describe('datos de balance', () => {
     const badBuy = { ...rawMap, wallBuys: [{ ...rawMap.wallBuys[0], weapon: 'no-existe' }] };
     expect(() => parseMap(badBuy, weapons)).toThrow(/weapon/);
   });
+
+  it('fase 2: armas del Contenedor con los valores del GDD', () => {
+    const w = cfg.weapons;
+    expect(w.mk17).toMatchObject({ damage: 70, rpm: 550, magazine: 20, mobility: 0.9 });
+    expect(w.m249).toMatchObject({ damage: 50, rpm: 800, magazine: 100, mobility: 0.85 });
+    expect(w.svd).toMatchObject({ damage: 300, fireMode: 'semi', magazine: 10, mobility: 0.9, penetration: 3 });
+    expect(w.arco).toMatchObject({ rpm: 90, magazine: 12, mobility: 0.95, recoil: 'none', chain: { targets: 5, range: 4 } });
+    expect(w.m1911?.penetration).toBe(1);
+    expect(w.m1911?.chain).toBeNull();
+  });
+
+  it('fase 2: precios del GDD para sueros, Contenedor, Forja y power-ups', () => {
+    expect(cfg.perks.perks.coraza?.cost).toBe(2500);
+    expect(cfg.perks.perks.segundoAliento?.cost).toBe(1500);
+    expect(cfg.perks.maxPerks).toBe(4);
+    expect(cfg.perks.bleedOutSeconds).toBe(45);
+    expect(cfg.contenedor.cost).toBe(950);
+    expect(cfg.forja).toMatchObject({ cost: 5000, repeatCost: 2500 });
+    expect(cfg.powerups).toMatchObject({ effectSeconds: 30, kinds: ['municionCompleta', 'bajaInstantanea', 'puntosDobles', 'ondaExpansiva'] });
+  });
+
+  it('fase 2: Segundo aliento en el Vestíbulo, Coraza y El Contenedor en el Laboratorio', () => {
+    const inVestibulo = (x: number) => x < 12;
+    const station = (perk: string) => cfg.map.perkStations.find((p) => p.perk === perk)!;
+    expect(inVestibulo(station('segundoAliento').anchor[0])).toBe(true);
+    expect(inVestibulo(station('coraza').anchor[0])).toBe(false);
+    for (const spot of cfg.map.contenedorSpots) expect(inVestibulo(spot.anchor[0])).toBe(false);
+    expect(inVestibulo(cfg.map.forja.anchor[0])).toBe(false);
+    expect(inVestibulo(cfg.map.powerSwitch.anchor[0])).toBe(false);
+  });
 });

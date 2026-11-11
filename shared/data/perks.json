@@ -1,0 +1,18 @@
+{
+  "maxPerks": 4,
+  "perks": {
+    "coraza": {
+      "cost": 2500,
+      "needsPower": true,
+      "healthMultiplier": 2
+    },
+    "segundoAliento": {
+      "cost": 1500,
+      "needsPower": false,
+      "selfRevivesPerGame": 3,
+      "selfReviveSeconds": 5
+    }
+  },
+  "bleedOutSeconds": 45,
+  "downedWeapon": "m1911"
+}

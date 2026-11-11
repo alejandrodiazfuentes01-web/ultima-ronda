@@ -8,7 +8,8 @@
     "reserve": 64,
     "reloadSeconds": 1.6,
     "mobility": 1,
-    "recoil": "medium"
+    "recoil": "medium",
+    "penetration": 1
   },
   "smg5": {
     "damage": 28,
@@ -19,6 +20,56 @@
     "reserve": 150,
     "reloadSeconds": 2.2,
     "mobility": 1,
-    "recoil": "low"
+    "recoil": "low",
+    "penetration": 1
+  },
+  "mk17": {
+    "damage": 70,
+    "pellets": 1,
+    "fireMode": "auto",
+    "rpm": 550,
+    "magazine": 20,
+    "reserve": 120,
+    "reloadSeconds": 2.6,
+    "mobility": 0.9,
+    "recoil": "high"
+  },
+  "m249": {
+    "damage": 50,
+    "pellets": 1,
+    "fireMode": "auto",
+    "rpm": 800,
+    "magazine": 100,
+    "reserve": 300,
+    "reloadSeconds": 5.5,
+    "mobility": 0.85,
+    "recoil": "medium"
+  },
+  "svd": {
+    "damage": 300,
+    "pellets": 1,
+    "fireMode": "semi",
+    "rpm": 150,
+    "magazine": 10,
+    "reserve": 50,
+    "reloadSeconds": 3,
+    "mobility": 0.9,
+    "recoil": "veryHigh",
+    "penetration": 3
+  },
+  "arco": {
+    "damage": 500,
+    "pellets": 1,
+    "fireMode": "semi",
+    "rpm": 90,
+    "magazine": 12,
+    "reserve": 60,
+    "reloadSeconds": 2.5,
+    "mobility": 0.95,
+    "recoil": "none",
+    "chain": {
+      "targets": 5,
+      "range": 4
+    }
   }
 }

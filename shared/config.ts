@@ -7,6 +7,10 @@ import rawEnemies from './data/enemies.json';
 import rawMap from './data/maps/prototipo.json';
 import rawPlayer from './data/player.json';
 import rawWeapons from './data/weapons.json';
+import rawPerks from './data/perks.json';
+import rawContenedor from './data/contenedor.json';
+import rawForja from './data/forja.json';
+import rawPowerups from './data/powerups.json';
 import { DataError, arr, bool, num, nums, obj, str, type Obj } from './data/validate';
 import { ROUNDS, type RoundsConfig } from './rounds';
 
@@ -135,6 +139,10 @@ export interface WeaponConfig {
   reloadSeconds: number;
   mobility: number;
   recoil: (typeof RECOIL_LEVELS)[number];
+  /** Cuántos enemigos atraviesa cada bala (1 = ninguno). */
+  penetration: number;
+  /** Daño en cadena: a cuántos enemigos llega y a qué distancia salta. */
+  chain: { targets: number; range: number } | null;
 }
 
 export function parseWeapons(raw: unknown): Record<string, WeaponConfig> {
@@ -155,6 +163,14 @@ export function parseWeapons(raw: unknown): Record<string, WeaponConfig> {
       reloadSeconds: num(x, 'reloadSeconds', ww),
       mobility: num(x, 'mobility', ww, { max: 1.5 }),
       recoil: str(x, 'recoil', ww, RECOIL_LEVELS) as WeaponConfig['recoil'],
+      penetration: 'penetration' in x ? num(x, 'penetration', ww, { int: true, min: 1 }) : 1,
+      chain:
+        'chain' in x
+          ? {
+              targets: num(obj(x.chain, `${ww}.chain`), 'targets', `${ww}.chain`, { int: true, min: 1 }),
+              range: num(obj(x.chain, `${ww}.chain`), 'range', `${ww}.chain`),
+            }
+          : null,
     };
   }
   return out;
@@ -191,6 +207,26 @@ export interface MapConfig {
   zones: Array<{ id: string; startsOpen: boolean }>;
   playerStart: { position: [number, number, number]; yaw: number };
   navFloors: Array<[number, number, number, number]>;
+  powerSwitch: Fixture;
+  perkStations: Array<Fixture & { perk: string }>;
+  forja: Fixture;
+  contenedorSpots: Fixture[];
+}
+
+/** Objeto fijo con el que se interactúa: punto de uso, hacia dónde mira y su caja sólida. */
+export interface Fixture {
+  anchor: Point2;
+  facing: Point2;
+  box: Box;
+}
+
+function fixture(raw: unknown, where: string): Fixture {
+  const o = obj(raw, where);
+  return {
+    anchor: nums(o.anchor, 2, `${where}.anchor`) as Point2,
+    facing: nums(o.facing, 2, `${where}.facing`) as Point2,
+    box: boxOf(o.box, `${where}.box`),
+  };
 }
 
 function boxOf(raw: unknown, where: string): Box {
@@ -264,10 +300,157 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       yaw: num(ps, 'yaw', `${w}.playerStart`, { min: -Math.PI * 2, max: Math.PI * 2 }),
     },
     navFloors: arr(o, 'navFloors', w).map((r, i) => nums(r, 4, `${w}.navFloors[${i}]`) as [number, number, number, number]),
+    powerSwitch: fixture(o.powerSwitch, `${w}.powerSwitch`),
+    perkStations: arr(o, 'perkStations', w).map((x, i) => ({
+      ...fixture(x, `${w}.perkStations[${i}]`),
+      perk: str(obj(x, `${w}.perkStations[${i}]`), 'perk', `${w}.perkStations[${i}]`),
+    })),
+    forja: fixture(o.forja, `${w}.forja`),
+    contenedorSpots: arr(o, 'contenedorSpots', w).map((x, i) => fixture(x, `${w}.contenedorSpots[${i}]`)),
   };
 }
 
 // ---------- Todo junto ----------
+
+// ---------- Sueros y derribo ----------
+
+export interface PerkConfig {
+  cost: number;
+  needsPower: boolean;
+  healthMultiplier: number;
+  selfRevivesPerGame: number;
+  selfReviveSeconds: number;
+}
+
+export interface PerksConfig {
+  maxPerks: number;
+  perks: Record<string, PerkConfig>;
+  bleedOutSeconds: number;
+  downedWeapon: string;
+}
+
+export function parsePerks(raw: unknown, weapons: Record<string, WeaponConfig>): PerksConfig {
+  const w = 'perks.json';
+  const o = obj(raw, w);
+  const list = obj(o.perks, `${w}.perks`);
+  const perks: Record<string, PerkConfig> = {};
+  for (const [id, v] of Object.entries(list)) {
+    const pw = `${w}.perks.${id}`;
+    const x = obj(v, pw);
+    perks[id] = {
+      cost: num(x, 'cost', pw, { int: true }),
+      needsPower: bool(x, 'needsPower', pw),
+      healthMultiplier: 'healthMultiplier' in x ? num(x, 'healthMultiplier', pw) : 1,
+      selfRevivesPerGame: 'selfRevivesPerGame' in x ? num(x, 'selfRevivesPerGame', pw, { int: true, allowZero: true }) : 0,
+      selfReviveSeconds: 'selfReviveSeconds' in x ? num(x, 'selfReviveSeconds', pw) : 0,
+    };
+  }
+  return {
+    maxPerks: num(o, 'maxPerks', w, { int: true, min: 1 }),
+    perks,
+    bleedOutSeconds: num(o, 'bleedOutSeconds', w),
+    downedWeapon: str(o, 'downedWeapon', w, Object.keys(weapons)),
+  };
+}
+
+// ---------- El Contenedor ----------
+
+export interface ContenedorConfig {
+  cost: number;
+  spinSeconds: number;
+  offerSeconds: number;
+  movesAfterMin: number;
+  movesAfterMax: number;
+  moveSeconds: number;
+  pool: string[];
+}
+
+export function parseContenedor(raw: unknown, weapons: Record<string, WeaponConfig>): ContenedorConfig {
+  const w = 'contenedor.json';
+  const o = obj(raw, w);
+  const pool = arr(o, 'pool', w).map((x, i) => {
+    if (typeof x !== 'string' || !weapons[x]) throw new DataError(`${w}.pool[${i}]: arma desconocida`);
+    return x;
+  });
+  const min = num(o, 'movesAfterMin', w, { int: true, min: 1 });
+  const max = num(o, 'movesAfterMax', w, { int: true, min: min });
+  return {
+    cost: num(o, 'cost', w, { int: true }),
+    spinSeconds: num(o, 'spinSeconds', w),
+    offerSeconds: num(o, 'offerSeconds', w),
+    movesAfterMin: min,
+    movesAfterMax: max,
+    moveSeconds: num(o, 'moveSeconds', w),
+    pool,
+  };
+}
+
+// ---------- La Forja ----------
+
+export interface ForjaConfig {
+  cost: number;
+  repeatCost: number;
+  seconds: number;
+  needsPower: boolean;
+  damageMultiplier: number;
+  magazineMultiplier: number;
+  reserveMultiplier: number;
+  ashWave: { radius: number; roundHealthFraction: number };
+}
+
+export function parseForja(raw: unknown): ForjaConfig {
+  const w = 'forja.json';
+  const o = obj(raw, w);
+  const a = obj(o.ashWave, `${w}.ashWave`);
+  return {
+    cost: num(o, 'cost', w, { int: true }),
+    repeatCost: num(o, 'repeatCost', w, { int: true }),
+    seconds: num(o, 'seconds', w),
+    needsPower: bool(o, 'needsPower', w),
+    damageMultiplier: num(o, 'damageMultiplier', w),
+    magazineMultiplier: num(o, 'magazineMultiplier', w),
+    reserveMultiplier: num(o, 'reserveMultiplier', w),
+    ashWave: {
+      radius: num(a, 'radius', `${w}.ashWave`),
+      roundHealthFraction: num(a, 'roundHealthFraction', `${w}.ashWave`, { max: 10 }),
+    },
+  };
+}
+
+// ---------- Power-ups ----------
+
+export const POWERUP_KINDS = ['municionCompleta', 'bajaInstantanea', 'puntosDobles', 'ondaExpansiva'] as const;
+export type PowerupKind = (typeof POWERUP_KINDS)[number];
+
+export interface PowerupsConfig {
+  dropChance: number;
+  maxPerRound: number;
+  pickupRadius: number;
+  lifetimeSeconds: number;
+  blinkSeconds: number;
+  effectSeconds: number;
+  nukePoints: number;
+  kinds: PowerupKind[];
+}
+
+export function parsePowerups(raw: unknown): PowerupsConfig {
+  const w = 'powerups.json';
+  const o = obj(raw, w);
+  const kinds = arr(o, 'kinds', w).map((k, i) => {
+    if (typeof k !== 'string' || !(POWERUP_KINDS as readonly string[]).includes(k)) throw new DataError(`${w}.kinds[${i}]: tipo desconocido`);
+    return k as PowerupKind;
+  });
+  return {
+    dropChance: num(o, 'dropChance', w, { max: 1, allowZero: true }),
+    maxPerRound: num(o, 'maxPerRound', w, { int: true, allowZero: true }),
+    pickupRadius: num(o, 'pickupRadius', w),
+    lifetimeSeconds: num(o, 'lifetimeSeconds', w),
+    blinkSeconds: num(o, 'blinkSeconds', w, { allowZero: true }),
+    effectSeconds: num(o, 'effectSeconds', w),
+    nukePoints: num(o, 'nukePoints', w, { int: true, allowZero: true }),
+    kinds,
+  };
+}
 
 export interface GameConfig {
   rounds: RoundsConfig;
@@ -276,19 +459,33 @@ export interface GameConfig {
   enemies: EnemiesConfig;
   weapons: Record<string, WeaponConfig>;
   map: MapConfig;
+  perks: PerksConfig;
+  contenedor: ContenedorConfig;
+  forja: ForjaConfig;
+  powerups: PowerupsConfig;
 }
 
 export function loadConfig(): GameConfig {
   const weapons = parseWeapons(rawWeapons);
   const player = parsePlayer(rawPlayer);
   if (!weapons[player.startWeapon]) throw new DataError(`player.json.startWeapon: el arma «${player.startWeapon}» no existe`);
+  const perks = parsePerks(rawPerks, weapons);
+  const map = parseMap(rawMap, weapons);
+  map.perkStations.forEach((st, i) => {
+    if (!perks.perks[st.perk]) throw new DataError(`mapa.perkStations[${i}].perk: el suero «${st.perk}» no existe en perks.json`);
+  });
+  if (map.contenedorSpots.length < 2) throw new DataError('mapa.contenedorSpots: El Contenedor necesita al menos dos huecos para trasladarse');
   return {
     rounds: ROUNDS,
     player,
     economy: parseEconomy(rawEconomy),
     enemies: parseEnemies(rawEnemies),
     weapons,
-    map: parseMap(rawMap, weapons),
+    map,
+    perks,
+    contenedor: parseContenedor(rawContenedor, weapons),
+    forja: parseForja(rawForja),
+    powerups: parsePowerups(rawPowerups),
   };
 }
 

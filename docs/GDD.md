@@ -167,6 +167,24 @@ Valores de partida que el resto del documento no fijaba, aprobados al empezar la
 | Cambio de arma | 0,5 s |
 | Cadencia máxima de las semiautomáticas | 400 disparos/min, aunque se pulse más rápido |
 
+Valores de partida añadidos al empezar la fase 2:
+
+| Concepto | Valor |
+| --- | --- |
+| Energía | Interruptor gratuito. Activa Coraza y La Forja |
+| Segundo aliento | En solitario funciona sin energía. Al caer, te levantas solo a los 5 s, sin recibir daño mientras tanto y con la M1911 en la mano. Pierdes todos los sueros, él incluido. Tres veces por partida; después su estación se apaga |
+| Caer sin Segundo aliento | Fin de la partida en solitario. El desangrado de 45 s queda para el cooperativo |
+| Coraza | Necesita energía. Vida máxima × 2 |
+| El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, Mk 17, M249, SVD y Arco voltaico |
+| La Forja | Daño × 2, cargador y reserva × 1,5 y munición llena. Efecto: cada baja con el arma mejorada suelta una onda de ceniza que quita a los enemigos a menos de 3 m la mitad de la vida de la ronda. Tarda 5 s; el arma se recoge en la máquina. Mientras solo haya un efecto, no se puede repetir la mejora |
+| Power-ups | 2 % por baja, máximo 4 por ronda. Se recogen a menos de 1,3 m. Duran 30 s en el suelo y parpadean los últimos 5. Baja instantánea y Puntos dobles duran 30 s. Onda expansiva elimina a todos los enemigos vivos y da 400 puntos, sin puntos por cada baja |
+| Mk 17 | Reserva 120, recarga 2,6 s |
+| M249 | Reserva 300, recarga 5,5 s |
+| SVD | Reserva 50, recarga 3 s, atraviesa hasta 3 enemigos, 150 disparos/min como máximo |
+| Arco voltaico | 500 de daño a cada uno de hasta 5 enemigos, saltando a menos de 4 m entre ellos. Reserva 60, recarga 2,5 s |
+
+En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
+
 Controles: WASD para moverse, ratón para apuntar y disparar, Mayúsculas para esprintar, Espacio para saltar, R para recargar, E para usar y comprar, V para el cuerpo a cuerpo, 1 y 2 o la rueda para cambiar de arma y Escape para la pausa. Nada va en Ctrl.
 
 Arsenal de lanzamiento. Cada arma cubre un papel del arsenal de Black Ops 3 y se asigna al arma real que dispara de forma más parecida:
