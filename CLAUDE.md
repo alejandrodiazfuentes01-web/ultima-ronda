@@ -82,10 +82,11 @@ Si un cambio acerca el juego a un límite, avisa. Si lo supera, no lo des por te
 
 ## Comandos
 
-Se crean en la fase 0. Mantén esta sección al día cuando existan.
+Mantén esta sección al día. Requieren Node 22 o posterior y `npm install` la primera vez.
 
 ```text
-npm run dev     servidor de desarrollo
-npm run build   build de producción
-npm test        pruebas
+npm run dev        servidor de desarrollo (http://localhost:5173)
+npm run build      comprueba tipos, genera dist/ y falla si supera el presupuesto de descarga
+npm run preview    sirve el build de dist/ (http://localhost:4173)
+npm test           pruebas
 ```
