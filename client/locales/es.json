@@ -47,5 +47,16 @@
   "prompt.forja": "E · mejorar {weapon} en La Forja · {cost}",
   "prompt.takeForged": "E · recoger {weapon} mejorada",
   "perk.coraza": "Coraza",
-  "perk.segundoAliento": "Segundo aliento"
+  "perk.segundoAliento": "Segundo aliento",
+  "banner.powerOn": "Energía activada",
+  "banner.contenedorMoving": "El Contenedor se traslada",
+  "banner.forjaReady": "{weapon} lista en La Forja",
+  "banner.perk": "Suero {perk}",
+  "powerup.municionCompleta": "Munición completa",
+  "powerup.bajaInstantanea": "Baja instantánea",
+  "powerup.puntosDobles": "Puntos dobles",
+  "powerup.ondaExpansiva": "Onda expansiva",
+  "hud.effect": "{name} {seconds}",
+  "downed.title": "Caído",
+  "downed.timer": "Segundo aliento: te levantas en {seconds} · quedan {left}"
 }

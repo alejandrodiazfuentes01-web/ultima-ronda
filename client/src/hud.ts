@@ -4,9 +4,12 @@
  */
 import type { Game } from '../../shared/sim/game';
 import type { Prompt, SimEvent } from '../../shared/sim/types';
-import { formatNumber, perkName, t, weaponName } from './i18n';
+import { formatNumber, perkName, t, weaponName, type TextKey } from './i18n';
 
 const FLOAT_POOL = 12;
+
+/** Color de la etiqueta de cada suero. */
+const PERK_COLOR: Record<string, string> = { coraza: '#ffa040', segundoAliento: '#4fe0ff' };
 
 /** Texto del aviso de interacción, con su precio. */
 export function promptText(pr: Prompt): string {
@@ -64,6 +67,14 @@ export class Hud {
   private readonly prompt = el('hud-prompt');
   private readonly hitmarker = el('hud-hitmarker');
   private readonly damage = el('hud-damage');
+  private readonly banner = el('hud-banner');
+  private readonly effects = el('hud-effects');
+  private readonly perks = el('hud-perks');
+  private readonly downed = el('hud-downed');
+  private readonly downedTimer = el('hud-downed-timer');
+  private lastPerks = '';
+  private lastEffects = '';
+  private lastDowned = '';
   private deniedTimer = 0;
   private last = { round: '', points: -1, ammo: '', weapon: '', status: '', prompt: '' };
 
@@ -105,13 +116,75 @@ export class Hud {
       case 'denied':
         this.deniedTimer = 1.2;
         break;
+      case 'powerOn':
+        this.showBanner(t('banner.powerOn'));
+        break;
+      case 'contenedorMoving':
+        this.showBanner(t('banner.contenedorMoving'));
+        break;
+      case 'forjaReady':
+        this.showBanner(t('banner.forjaReady', { weapon: weaponName(ev.weapon) }));
+        break;
+      case 'powerupPickup':
+        this.showBanner(t(`powerup.${ev.kind}` as TextKey));
+        break;
+      case 'purchase':
+        if (ev.what === 'perk') this.showBanner(t('banner.perk', { perk: perkName(ev.id) }));
+        break;
       default:
         break;
     }
   }
 
+  private showBanner(text: string): void {
+    this.banner.textContent = text;
+    restart(this.banner, 'show');
+  }
+
   update(game: Game, dt: number): void {
+    // Sueros activos.
+    const perkKey = game.player.perks.join(',');
+    if (perkKey !== this.lastPerks) {
+      this.lastPerks = perkKey;
+      this.perks.replaceChildren(
+        ...game.player.perks.map((id) => {
+          const span = document.createElement('span');
+          span.textContent = perkName(id);
+          span.style.background = PERK_COLOR[id] ?? '#ccc';
+          return span;
+        }),
+      );
+    }
+
+    // Temporizadores de power-ups.
+    const fx: string[] = [];
+    for (const kind of ['bajaInstantanea', 'puntosDobles'] as const) {
+      const left = game.effects[kind];
+      if (left > 0) fx.push(`${left <= 5 ? '!' : ''}${t('hud.effect', { name: t(`powerup.${kind}`), seconds: Math.ceil(left) })}`);
+    }
+    const fxKey = fx.join('|');
+    if (fxKey !== this.lastEffects) {
+      this.lastEffects = fxKey;
+      this.effects.replaceChildren(
+        ...fx.map((line) => {
+          const div = document.createElement('div');
+          div.textContent = line.replace(/^!/, '');
+          if (line.startsWith('!')) div.className = 'blink';
+          return div;
+        }),
+      );
+    }
+
+    // Caído.
     const p = game.player;
+    this.downed.hidden = !p.downed;
+    if (p.downed) {
+      const sa = game.cfg.perks.perks.segundoAliento;
+      const left = sa ? sa.selfRevivesPerGame - p.selfRevivesUsed : 0;
+      const text = t('downed.timer', { seconds: Math.ceil(p.downTimer), left });
+      if (text !== this.lastDowned) this.downedTimer.textContent = this.lastDowned = text;
+    }
+
     const r = game.round;
 
     const roundText =
@@ -123,7 +196,7 @@ export class Hud {
       this.last.points = p.points;
     }
 
-    const slot = p.slots[p.current];
+    const slot = game.activeSlot();
     const ammo = slot ? `${slot.mag} / ${slot.reserve}` : '';
     if (ammo !== this.last.ammo) this.ammo.textContent = this.last.ammo = ammo;
     const wname = slot ? weaponName(slot.weapon) : '';

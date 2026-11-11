@@ -15,6 +15,28 @@ const MUSIC = 1;
 const SHOT: Record<string, { freq: number; dur: number; gain: number; thump: number }> = {
   m1911: { freq: 1700, dur: 0.13, gain: 2.2, thump: 140 },
   smg5: { freq: 2500, dur: 0.07, gain: 1.5, thump: 170 },
+  mk17: { freq: 1300, dur: 0.15, gain: 2.4, thump: 110 },
+  m249: { freq: 1900, dur: 0.1, gain: 1.9, thump: 130 },
+  svd: { freq: 1100, dur: 0.22, gain: 2.6, thump: 90 },
+};
+
+/** Notas en hercios. */
+const NOTE = { G3: 196, C4: 261.6, E4: 329.6, G4: 392, C5: 523.3, E5: 659.3, G5: 784, B5: 987.8, E6: 1318.5 };
+
+/** Melodía corta de cada suero. */
+const PERK_TUNE: Record<string, Array<[number, number]>> = {
+  coraza: [
+    [NOTE.G3, 0],
+    [NOTE.C4, 0.14],
+    [NOTE.G4, 0.28],
+    [NOTE.C5, 0.42],
+  ],
+  segundoAliento: [
+    [NOTE.E5, 0],
+    [NOTE.G5, 0.1],
+    [NOTE.B5, 0.2],
+    [NOTE.E6, 0.3],
+  ],
 };
 const DEFAULT_SHOT = { freq: 2000, dur: 0.1, gain: 1.8, thump: 150 };
 
@@ -178,12 +200,30 @@ export class AudioEngine {
 
   // ------------------------------------------------------------ sonidos
 
-  private shot(weapon: string): void {
-    const s = SHOT[weapon] ?? DEFAULT_SHOT;
+  private shot(weapon: string, upgraded: boolean): void {
     const t = this.now;
+    if (weapon === 'arco') {
+      this.zap(t, 0.5);
+      return;
+    }
+    const s = SHOT[weapon] ?? DEFAULT_SHOT;
+    // Arma mejorada en La Forja: un brillo agudo encima del disparo.
+    if (upgraded) this.tone(this.sfx, t, { type: 'sawtooth', freq: 1800, freqEnd: 900, dur: 0.08, gain: 0.08 });
     this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: s.freq, freqEnd: s.freq * 0.4, q: 0.7, dur: s.dur, gain: s.gain });
     this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 900, dur: s.dur * 1.6, gain: s.gain * 0.5 });
     this.tone(this.sfx, t, { type: 'sine', freq: s.thump, freqEnd: 45, dur: 0.12, gain: Math.min(0.8, s.gain * 0.35) });
+  }
+
+  /** Descarga eléctrica (Arco voltaico). */
+  private zap(at: number, gain: number, dest?: AudioNode): void {
+    const out = dest ?? this.sfx;
+    this.noiseBurst(out, at, { type: 'highpass', freq: 2500, dur: 0.12, gain: gain * 0.8 });
+    this.tone(out, at, { type: 'sawtooth', freq: 2400, freqEnd: 300, dur: 0.14, gain: gain * 0.4 });
+    this.tone(out, at, { type: 'square', freq: 90, dur: 0.1, gain: gain * 0.3 });
+  }
+
+  private tune(at: number, notes: Array<[number, number]>, type: OscillatorType, gain: number, len = 0.16): void {
+    for (const [f, dt] of notes) this.tone(this.sfx, at + dt, { type, freq: f, dur: len, gain });
   }
 
   private click(at: number, freq: number, gain: number): void {
@@ -288,7 +328,7 @@ export class AudioEngine {
     const t = this.now;
     switch (ev.type) {
       case 'shot':
-        this.shot(ev.weapon);
+        this.shot(ev.weapon, ev.upgraded);
         break;
       case 'dryFire':
         this.click(t, 3000, 0.2);
@@ -316,6 +356,21 @@ export class AudioEngine {
         if (ev.hit) this.tone(this.sfx, t + 0.05, { type: 'sine', freq: 120, freqEnd: 60, dur: 0.12, gain: 0.5 });
         break;
       case 'purchase':
+        if (ev.what === 'perk') {
+          this.tune(t, PERK_TUNE[ev.id] ?? PERK_TUNE.coraza!, ev.id === 'coraza' ? 'square' : 'sine', ev.id === 'coraza' ? 0.08 : 0.15);
+          break;
+        }
+        if (ev.what === 'contenedor') {
+          // Carraca mientras gira: clics que se van espaciando.
+          const spin = game.cfg.contenedor.spinSeconds;
+          for (let k = 0, at = 0; at < spin; k++, at += 0.05 + (at / spin) * 0.25) this.click(t + at, 2200 - k * 10, 0.12);
+          break;
+        }
+        if (ev.what === 'forja') {
+          for (let i = 0; i < 4; i++) this.tone(this.sfx, t + i * 1.1, { type: 'sine', freq: 95, freqEnd: 45, dur: 0.3, gain: 0.6 });
+          this.tone(this.sfx, t, { type: 'sawtooth', freq: 55, attack: 0.4, dur: game.cfg.forja.seconds, gain: 0.07 });
+          break;
+        }
         [660, 880, 1320].forEach((f, i) => this.tone(this.sfx, t + i * 0.07, { type: 'triangle', freq: f, dur: 0.12, gain: 0.18 }));
         if (ev.what === 'door') {
           this.noiseBurst(this.sfx, t + 0.1, { type: 'lowpass', freq: 300, freqEnd: 1600, attack: 0.3, dur: 1.2, gain: 0.15 });
@@ -358,11 +413,80 @@ export class AudioEngine {
       case 'enemySpawned':
         this.nextVoice[ev.enemy] = t + 0.3 + Math.random() * 1.2;
         break;
+      case 'powerOn':
+        this.tone(this.sfx, t, { type: 'sine', freq: 70, freqEnd: 35, dur: 0.4, gain: 0.6 });
+        this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: 1800, dur: 0.08, gain: 0.4 });
+        this.tone(this.sfx, t + 0.2, { type: 'sawtooth', freq: 50, freqEnd: 120, attack: 0.6, dur: 1.4, gain: 0.12 });
+        break;
+      case 'downed':
+        for (let i = 0; i < 3; i++) {
+          this.tone(this.sfx, t + i * 0.8, { type: 'sine', freq: 60, freqEnd: 40, dur: 0.15, gain: 0.7 });
+          this.tone(this.sfx, t + i * 0.8 + 0.22, { type: 'sine', freq: 55, freqEnd: 38, dur: 0.12, gain: 0.5 });
+        }
+        break;
+      case 'revived':
+        this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: 400, freqEnd: 2400, q: 1.2, attack: 0.25, dur: 0.5, gain: 0.3 });
+        this.tune(t + 0.2, PERK_TUNE.segundoAliento!, 'sine', 0.12, 0.12);
+        break;
+      case 'contenedorOffer':
+        this.tune(t, [[NOTE.C5, 0], [NOTE.G5, 0.08]], 'triangle', 0.2, 0.2);
+        break;
+      case 'contenedorTaken':
+      case 'forjaTaken':
+        this.tune(t, [[NOTE.E5, 0], [NOTE.B5, 0.06], [NOTE.E6, 0.12]], 'triangle', 0.15, 0.15);
+        break;
+      case 'contenedorMoving':
+        this.tone(this.sfx, t, { type: 'sawtooth', freq: 180, freqEnd: 60, attack: 0.1, dur: 1.6, gain: 0.15 });
+        this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 400, attack: 0.4, dur: 1.4, gain: 0.25 });
+        break;
+      case 'forjaReady':
+        for (const [f, d] of [[880, 1.2], [2210, 0.8], [3530, 0.5]] as const) this.tone(this.sfx, t, { type: 'sine', freq: f, dur: d, gain: 0.12 });
+        break;
+      case 'chain':
+        this.zap(t, 0.35, this.out(ev.to));
+        break;
+      case 'ashWave':
+        this.noiseBurst(this.out(ev.at), t, { type: 'lowpass', freq: 200, freqEnd: 1600, attack: 0.05, dur: 0.45, gain: 0.6 });
+        break;
+      case 'powerupDrop': {
+        const pu = game.pickups[ev.slot];
+        if (pu) {
+          const out = this.out({ x: pu.x, y: 0.7, z: pu.z });
+          [1568, 2093, 2637].forEach((f, i) => this.tone(out, t + i * 0.05, { type: 'sine', freq: f, dur: 0.25, gain: 0.25 }));
+        }
+        break;
+      }
+      case 'powerupPickup':
+        this.powerupJingle(ev.kind, t);
+        break;
+      case 'effectEnd':
+        this.tune(t, [[NOTE.G5, 0], [NOTE.C5, 0.12]], 'triangle', 0.15);
+        break;
       case 'gameOver':
         this.setMusic(0, false, 0);
         this.tone(this.sfx, t, { type: 'sawtooth', freq: 220, freqEnd: 40, attack: 0.05, dur: 2.2, gain: 0.2 });
         break;
       default:
+        break;
+    }
+  }
+
+  /** Motivo propio de cada power-up al recogerlo. */
+  private powerupJingle(kind: string, t: number): void {
+    switch (kind) {
+      case 'municionCompleta':
+        this.tune(t, [[NOTE.C4, 0], [NOTE.E4, 0.07], [NOTE.G4, 0.14], [NOTE.C5, 0.21], [NOTE.E5, 0.28]], 'square', 0.08, 0.12);
+        break;
+      case 'bajaInstantanea':
+        this.tone(this.sfx, t, { type: 'sawtooth', freq: 110, freqEnd: 55, dur: 0.8, gain: 0.25 });
+        this.tune(t, [[NOTE.E4, 0], [NOTE.E4 * 1.06, 0.2]], 'square', 0.1, 0.3);
+        break;
+      case 'puntosDobles':
+        this.tune(t, [[NOTE.G5, 0], [NOTE.G5, 0.12], [NOTE.C5 * 2, 0.24]], 'triangle', 0.2, 0.1);
+        break;
+      case 'ondaExpansiva':
+        this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 1200, freqEnd: 80, attack: 0.01, dur: 1.8, gain: 1 });
+        this.tone(this.sfx, t, { type: 'sine', freq: 60, freqEnd: 25, dur: 1.5, gain: 0.8 });
         break;
     }
   }

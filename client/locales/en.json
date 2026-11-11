@@ -47,5 +47,16 @@
   "prompt.forja": "E · upgrade {weapon} at La Forja · {cost}",
   "prompt.takeForged": "E · collect upgraded {weapon}",
   "perk.coraza": "Coraza",
-  "perk.segundoAliento": "Segundo aliento"
+  "perk.segundoAliento": "Segundo aliento",
+  "banner.powerOn": "Power on",
+  "banner.contenedorMoving": "El Contenedor is moving",
+  "banner.forjaReady": "{weapon} ready at La Forja",
+  "banner.perk": "{perk} serum",
+  "powerup.municionCompleta": "Munición completa",
+  "powerup.bajaInstantanea": "Baja instantánea",
+  "powerup.puntosDobles": "Puntos dobles",
+  "powerup.ondaExpansiva": "Onda expansiva",
+  "hud.effect": "{name} {seconds}",
+  "downed.title": "Down",
+  "downed.timer": "Segundo aliento: back up in {seconds} · {left} left"
 }

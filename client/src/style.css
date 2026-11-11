@@ -196,6 +196,97 @@ body {
   transition: opacity 0.15s;
 }
 
+#hud-banner {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  white-space: nowrap;
+  opacity: 0;
+}
+
+#hud-banner.show {
+  animation: banner 2.2s ease-out forwards;
+}
+
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  10%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+#hud-effects {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+#hud-effects .blink {
+  animation: blink 0.4s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+#hud-perks {
+  position: absolute;
+  left: 16px;
+  bottom: 52px;
+  display: flex;
+  gap: 6px;
+}
+
+#hud-perks span {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #121417;
+}
+
+#hud-downed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(40, 10, 10, 0.25) 30%, rgba(90, 10, 10, 0.7) 100%);
+  filter: saturate(0.4);
+}
+
+#hud-downed .title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+#hud-downed-timer {
+  font-size: 16px;
+}
+
 /* ---------- Medidor de rendimiento ---------- */
 
 #perf {
