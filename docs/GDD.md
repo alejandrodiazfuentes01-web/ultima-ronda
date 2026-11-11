@@ -493,13 +493,13 @@ Coste estimado hasta el lanzamiento, a confirmar: dominio, unos 15 € al año; 
 ### Las dos primeras semanas
 
 - [x] Decidir el nombre definitivo y comprobar que no existe como marca ni como juego.
-- [ ] Crear el repositorio con las carpetas `shared/`, `client/` y `server/`, TypeScript y Vite.
-- [ ] Montar el despliegue automático a un dominio de pruebas con HTTPS. WebGPU solo funciona en contexto seguro.
+- [x] Crear el repositorio con las carpetas `shared/`, `client/` y `server/`, TypeScript y Vite.
+- [x] Montar el despliegue automático a un dominio de pruebas con HTTPS. WebGPU solo funciona en contexto seguro.
 - [ ] Poner en pantalla una sala de cajas grises con control en primera persona y captura de ratón.
 - [ ] Integrar Rapier: colisión con muros y un disparo por rayo que marque el impacto.
-- [ ] Escribir el archivo de datos con las curvas de ronda y sus pruebas unitarias.
+- [x] Escribir el archivo de datos con las curvas de ronda y sus pruebas unitarias.
 - [ ] Jugar dos horas al género tomando notas de ritmo: cuánto dura cada ronda, cuándo se compra, cuándo se cae.
-- [ ] Abrir la hoja de licencias de assets y la lista de «después del lanzamiento».
+- [x] Abrir la hoja de licencias de assets y la lista de «después del lanzamiento».
 
 ## Fuentes
 
