@@ -5,6 +5,7 @@
 import { Crowd, type CrowdAgent, type NavMesh, NavMeshQuery } from '@recast-navigation/core';
 import { generateSoloNavMesh } from '@recast-navigation/generators';
 import type { MapConfig } from '../config';
+import { fixtures } from './physics';
 import type { Vec3 } from './types';
 
 /** Medidas del agente (geometría, no balance). */
@@ -26,6 +27,17 @@ export class Navigation {
       const base = positions.length / 3;
       positions.push(x0, 0, z0, x1, 0, z0, x1, 0, z1, x0, 0, z1);
       indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    }
+    // Los objetos sólidos del mapa se añaden como cajas: el suelo bajo ellos deja de ser transitable.
+    for (const f of fixtures(map)) {
+      const [x0, y0, z0, x1, y1, z1] = f.box;
+      const base = positions.length / 3;
+      for (const [x, y, z] of [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]] as const) {
+        positions.push(x, y, z);
+      }
+      for (const [a, b, c] of [[4, 6, 5], [4, 7, 6], [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]] as const) {
+        indices.push(base + a, base + b, base + c);
+      }
     }
     const result = generateSoloNavMesh(positions, indices, {
       cs: CELL,

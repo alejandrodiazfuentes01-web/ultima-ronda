@@ -50,7 +50,7 @@ describe('inicio de partida', () => {
   it('500 puntos, M1911 con 8 + 64 balas y vida completa', () => {
     const g = newGame();
     expect(g.player.points).toBe(500);
-    expect(g.player.slots[0]).toEqual({ weapon: 'm1911', mag: 8, reserve: 64 });
+    expect(g.player.slots[0]).toEqual({ weapon: 'm1911', mag: 8, reserve: 64, upgraded: false });
     expect(g.player.slots[1]).toBeNull();
     expect(g.player.health).toBe(100);
   });
@@ -154,12 +154,12 @@ describe('armas', () => {
     run(g, seconds(1.5));
     expect(g.player.slots[0]!.mag).toBe(0);
     run(g, seconds(0.2));
-    expect(g.player.slots[0]).toEqual({ weapon: 'm1911', mag: 8, reserve: 56 });
+    expect(g.player.slots[0]).toEqual({ weapon: 'm1911', mag: 8, reserve: 56, upgraded: false });
   });
 
   it('sin balas ni reserva, el gatillo solo hace clic', () => {
     const g = newGame();
-    g.player.slots[0] = { weapon: 'm1911', mag: 0, reserve: 0 };
+    g.player.slots[0] = { weapon: 'm1911', mag: 0, reserve: 0, upgraded: false };
     const ev = run(g, 1, () => ({ fire: true }));
     expect(ev).toContainEqual({ type: 'dryFire', weapon: 'm1911' });
   });
@@ -184,7 +184,7 @@ describe('compras', () => {
     g.teleportPlayer(9.5, 1);
     run(g, 1, () => ({ use: true }));
     expect(g.player.points).toBe(1250);
-    expect(g.player.slots[1]).toEqual({ weapon: 'smg5', mag: 30, reserve: 150 });
+    expect(g.player.slots[1]).toEqual({ weapon: 'smg5', mag: 30, reserve: 150, upgraded: false });
     expect(g.player.current).toBe(1);
 
     // Con la munición llena no se cobra nada.
@@ -199,7 +199,7 @@ describe('compras', () => {
     run(g, 1);
     run(g, 1, () => ({ use: true }));
     expect(g.player.points).toBe(875);
-    expect(g.player.slots[1]).toEqual({ weapon: 'smg5', mag: 30, reserve: 150 });
+    expect(g.player.slots[1]).toEqual({ weapon: 'smg5', mag: 30, reserve: 150, upgraded: false });
   });
 
   it('el SMG-5 es automático: unas 13 balas por segundo con el gatillo apretado', () => {

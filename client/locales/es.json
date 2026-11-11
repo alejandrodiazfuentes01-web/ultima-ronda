@@ -37,5 +37,15 @@
   "renderer.webgl2": "WebGL 2",
   "perf.line": "{fps} FPS · 1 % lento {low} · {calls} dibujos · {tris} triángulos · {backend}",
   "error.noGraphics": "Tu navegador no puede mostrar gráficos 3D. Prueba con una versión reciente de Chrome, Edge, Firefox o Safari.",
-  "error.pointerLock": "No se pudo capturar el ratón. Haz clic otra vez."
+  "error.pointerLock": "No se pudo capturar el ratón. Haz clic otra vez.",
+  "prompt.powerSwitch": "E · encender la energía",
+  "prompt.needPower": "Necesita energía",
+  "prompt.buyPerk": "E · suero {perk} · {cost}",
+  "prompt.perkFull": "Ya llevas el máximo de sueros",
+  "prompt.buyContenedor": "E · abrir El Contenedor · {cost}",
+  "prompt.takeWeapon": "E · coger {weapon}",
+  "prompt.forja": "E · mejorar {weapon} en La Forja · {cost}",
+  "prompt.takeForged": "E · recoger {weapon} mejorada",
+  "perk.coraza": "Coraza",
+  "perk.segundoAliento": "Segundo aliento"
 }

@@ -4,7 +4,7 @@
  * y el futuro servidor la leen igual.
  */
 import type { CrowdAgent } from '@recast-navigation/core';
-import { enemySpeed, type GameConfig, type WeaponConfig } from '../config';
+import { enemySpeed, type GameConfig, type PowerupKind, type WeaponConfig } from '../config';
 import { aliveCap, enemyCount, enemyHealth, spawnInterval } from '../rounds';
 import { SIM_DT } from './fixedStep';
 import { Navigation } from './nav';
@@ -20,6 +20,10 @@ const BULLET_RANGE = 100;
 const CONTACT_DISTANCE = 0.7;
 /** Cada cuántos pasos recalculan los enemigos su destino. */
 const RETARGET_TICKS = 10;
+/** Huecos para power-ups en el suelo a la vez. */
+const PICKUP_POOL = 8;
+/** Altura del pecho de un Vacío, para dibujar el arco del Arco voltaico. */
+const CHEST_HEIGHT = 1.2;
 
 export type EnemyPhase = 'inactive' | 'approaching' | 'tearing' | 'climbing' | 'chasing';
 
@@ -44,6 +48,8 @@ export interface WeaponSlot {
   weapon: string;
   mag: number;
   reserve: number;
+  /** Mejorada en La Forja. */
+  upgraded: boolean;
 }
 
 export interface PlayerState {
@@ -65,6 +71,14 @@ export interface PlayerState {
   repairTimer: number;
   grounded: boolean;
   sprinting: boolean;
+  /** Sueros activos, por orden de compra. */
+  perks: string[];
+  /** Caído y levantándose solo (Segundo aliento). */
+  downed: boolean;
+  downTimer: number;
+  selfRevivesUsed: number;
+  /** Arma que se usa mientras está caído. */
+  downedSlot: WeaponSlot | null;
 }
 
 export interface WindowState {
@@ -81,6 +95,31 @@ export interface RoundState {
   breakTimer: number;
   repairPoints: number;
   kills: number;
+  powerupsDropped: number;
+}
+
+export interface ContenedorState {
+  spot: number;
+  phase: 'idle' | 'spinning' | 'offering' | 'moving';
+  timer: number;
+  /** Arma que sale (se decide al pagar; el cliente la descubre al acabar el giro). */
+  weapon: string | null;
+  uses: number;
+  movesAfter: number;
+}
+
+export interface ForjaState {
+  phase: 'idle' | 'working' | 'ready';
+  timer: number;
+  slot: WeaponSlot | null;
+}
+
+export interface PickupState {
+  active: boolean;
+  kind: PowerupKind;
+  x: number;
+  z: number;
+  timer: number;
 }
 
 export class Game {
@@ -92,8 +131,14 @@ export class Game {
   readonly windows: WindowState[];
   readonly doors: Array<{ open: boolean }>;
   readonly round: RoundState;
+  readonly contenedor: ContenedorState;
+  readonly forja: ForjaState = { phase: 'idle', timer: 0, slot: null };
+  readonly pickups: PickupState[] = [];
+  /** Segundos que quedan de cada efecto de power-up. */
+  readonly effects = { bajaInstantanea: 0, puntosDobles: 0 };
   /** Lo que ha pasado en el último paso. Se vacía al empezar cada paso. */
   readonly events: SimEvent[] = [];
+  power = false;
   prompt: Prompt | null = null;
   tick = 0;
 
@@ -118,9 +163,8 @@ export class Game {
     this.windows = map.windows.map((w) => ({ planks: map.planksPerWindow, active: this.openZones.has(w.zone) }));
     this.doors = map.doors.map(() => ({ open: false }));
 
-    const startWeapon = this.weapon(cfg.player.startWeapon);
     const slots: Array<WeaponSlot | null> = new Array<WeaponSlot | null>(cfg.player.weaponSlots).fill(null);
-    slots[0] = { weapon: startWeapon.id, mag: startWeapon.magazine, reserve: startWeapon.reserve };
+    slots[0] = this.freshSlot(cfg.player.startWeapon);
     this.player = {
       pos: { ...start },
       prevPos: { ...start },
@@ -140,6 +184,11 @@ export class Game {
       repairTimer: 0,
       grounded: true,
       sprinting: false,
+      perks: [],
+      downed: false,
+      downTimer: 0,
+      selfRevivesUsed: 0,
+      downedSlot: null,
     };
 
     for (let i = 0; i < pool; i++) {
@@ -158,8 +207,11 @@ export class Game {
         spawnTick: 0,
       });
     }
+    for (let i = 0; i < PICKUP_POOL; i++) this.pickups.push({ active: false, kind: 'municionCompleta', x: 0, z: 0, timer: 0 });
 
-    this.round = { number: 0, phase: 'waiting', toSpawn: 0, alive: 0, spawnTimer: 0, breakTimer: 0, repairPoints: 0, kills: 0 };
+    this.contenedor = { spot: 0, phase: 'idle', timer: 0, weapon: null, uses: 0, movesAfter: this.rollMovesAfter() };
+
+    this.round = { number: 0, phase: 'waiting', toSpawn: 0, alive: 0, spawnTimer: 0, breakTimer: 0, repairPoints: 0, kills: 0, powerupsDropped: 0 };
     if (this.opts.autoRounds) this.startRound(1);
   }
 
@@ -182,6 +234,8 @@ export class Game {
     }
 
     this.updatePlayer(input);
+    this.updateMachines();
+    this.updatePowerups();
     this.updateRounds();
     this.updateEnemies();
     this.physics.step();
@@ -193,6 +247,49 @@ export class Game {
     this.prev.reload = input.reload;
   }
 
+  // ------------------------------------------------------------------ armas: capacidades
+
+  private weapon(id: string): WeaponConfig {
+    const w = this.cfg.weapons[id];
+    if (!w) throw new Error(`Arma desconocida: ${id}`);
+    return w;
+  }
+
+  private freshSlot(id: string): WeaponSlot {
+    const w = this.weapon(id);
+    return { weapon: id, mag: w.magazine, reserve: w.reserve, upgraded: false };
+  }
+
+  /** Cargador máximo del arma, con la mejora de La Forja si la tiene. */
+  magazineOf(slot: WeaponSlot): number {
+    const base = this.weapon(slot.weapon).magazine;
+    return slot.upgraded ? Math.round(base * this.cfg.forja.magazineMultiplier) : base;
+  }
+
+  /** Reserva máxima del arma, con la mejora de La Forja si la tiene. */
+  reserveOf(slot: WeaponSlot): number {
+    const base = this.weapon(slot.weapon).reserve;
+    return slot.upgraded ? Math.round(base * this.cfg.forja.reserveMultiplier) : base;
+  }
+
+  private fill(slot: WeaponSlot): void {
+    slot.mag = this.magazineOf(slot);
+    slot.reserve = this.reserveOf(slot);
+  }
+
+  /** El arma que el jugador tiene en la mano ahora (la de caído, si está caído). */
+  activeSlot(): WeaponSlot | null {
+    const p = this.player;
+    return p.downed ? p.downedSlot : (p.slots[p.current] ?? null);
+  }
+
+  /** Vida máxima con los sueros activos. */
+  maxHealth(): number {
+    let h = this.cfg.player.maxHealth;
+    for (const id of this.player.perks) h *= this.cfg.perks.perks[id]?.healthMultiplier ?? 1;
+    return h;
+  }
+
   // ------------------------------------------------------------------ jugador
 
   private updatePlayer(input: PlayerInput): void {
@@ -201,21 +298,27 @@ export class Game {
     p.yaw = input.yaw;
     p.pitch = Math.max(-1.5, Math.min(1.5, input.pitch));
 
+    if (p.downed) {
+      p.downTimer -= SIM_DT;
+      if (p.downTimer <= 0) this.revive();
+    }
+
     // Vida: se regenera tras unos segundos sin recibir daño.
     p.sinceDamage += SIM_DT;
-    if (p.sinceDamage >= cp.regenDelaySeconds) p.health = Math.min(cp.maxHealth, p.health + cp.regenPerSecond * SIM_DT);
+    const maxHealth = this.maxHealth();
+    if (!p.downed && p.sinceDamage >= cp.regenDelaySeconds) p.health = Math.min(maxHealth, p.health + cp.regenPerSecond * SIM_DT);
 
-    // Movimiento.
-    const slot = p.slots[p.current];
+    // Movimiento. Caído, no se mueve.
+    const slot = this.activeSlot();
     const mobility = slot ? this.weapon(slot.weapon).mobility : 1;
-    let mx = input.moveX;
-    let mz = input.moveZ;
+    let mx = p.downed ? 0 : input.moveX;
+    let mz = p.downed ? 0 : input.moveZ;
     const len = Math.hypot(mx, mz);
     if (len > 1) {
       mx /= len;
       mz /= len;
     }
-    p.sprinting = input.sprint && mz > 0.1;
+    p.sprinting = !p.downed && input.sprint && mz > 0.1;
     const speed = (p.sprinting ? cp.sprintSpeed : cp.walkSpeed) * mobility;
     const sin = Math.sin(p.yaw);
     const cos = Math.cos(p.yaw);
@@ -235,7 +338,7 @@ export class Game {
       }
     }
 
-    if (p.grounded && input.jump && !this.prev.jump) p.vy = Math.sqrt(2 * GRAVITY * cp.jumpHeight);
+    if (!p.downed && p.grounded && input.jump && !this.prev.jump) p.vy = Math.sqrt(2 * GRAVITY * cp.jumpHeight);
     p.vy -= GRAVITY * SIM_DT;
     const next = this.physics.movePlayer(p.pos, { x: vx * SIM_DT, y: p.vy * SIM_DT, z: vz * SIM_DT });
     p.pos.x = next.x;
@@ -245,8 +348,12 @@ export class Game {
     if (p.grounded && p.vy < 0) p.vy = 0;
 
     this.updateWeapons(input);
-    this.updateMelee(input);
-    this.updateInteraction(input);
+    if (!p.downed) {
+      this.updateMelee(input);
+      this.updateInteraction(input);
+    } else {
+      this.prompt = null;
+    }
   }
 
   /** Coloca al jugador en un punto del suelo (pruebas y jugador automático). */
@@ -270,12 +377,6 @@ export class Game {
     return { x: p.x, y: p.y + EYE_HEIGHT, z: p.z };
   }
 
-  private weapon(id: string): WeaponConfig {
-    const w = this.cfg.weapons[id];
-    if (!w) throw new Error(`Arma desconocida: ${id}`);
-    return w;
-  }
-
   private updateWeapons(input: PlayerInput): void {
     const p = this.player;
     // Puede quedar hasta un paso por debajo de 0: así la fracción sobrante pasa al siguiente disparo
@@ -283,9 +384,9 @@ export class Game {
     p.fireCooldown = Math.max(-SIM_DT, p.fireCooldown - SIM_DT);
     p.switchTimer = Math.max(0, p.switchTimer - SIM_DT);
 
-    // Cambio de arma.
-    let target = input.selectSlot;
-    if (target === null && input.cycleWeapon !== 0) {
+    // Cambio de arma (no mientras se está caído).
+    let target = p.downed ? null : input.selectSlot;
+    if (!p.downed && target === null && input.cycleWeapon !== 0) {
       const n = p.slots.length;
       for (let k = 1; k < n; k++) {
         const s = (p.current + input.cycleWeapon * k + n * k) % n;
@@ -301,7 +402,7 @@ export class Game {
       p.reloadTimer = 0;
     }
 
-    const slot = p.slots[p.current];
+    const slot = this.activeSlot();
     if (!slot) return;
     const w = this.weapon(slot.weapon);
 
@@ -310,7 +411,7 @@ export class Game {
       p.reloadTimer -= SIM_DT;
       if (p.reloadTimer <= 0) {
         p.reloadTimer = 0;
-        const take = Math.min(w.magazine - slot.mag, slot.reserve);
+        const take = Math.min(this.magazineOf(slot) - slot.mag, slot.reserve);
         slot.mag += take;
         slot.reserve -= take;
       }
@@ -328,21 +429,56 @@ export class Game {
     }
     slot.mag--;
     p.fireCooldown = Math.max(p.fireCooldown, -SIM_DT) + 60 / w.rpm;
-    this.events.push({ type: 'shot', weapon: w.id });
+    this.events.push({ type: 'shot', weapon: w.id, upgraded: slot.upgraded });
+    this.fire(w, slot.upgraded);
+  }
+
+  /** Un disparo: rayo que puede atravesar enemigos y, con el Arco voltaico, saltar entre ellos. */
+  private fire(w: WeaponConfig, upgraded: boolean): void {
     const eye = this.eye();
     const dir = this.lookDir();
+    const damage = w.damage * (upgraded ? this.cfg.forja.damageMultiplier : 1) * this.opts.damageScale;
     for (let i = 0; i < w.pellets; i++) {
-      const hit = this.physics.raycast(eye, dir, BULLET_RANGE);
-      if (hit && hit.enemy >= 0 && hit.part) {
+      const hits = this.physics.raycastPierce(eye, dir, BULLET_RANGE, w.penetration);
+      for (const hit of hits) {
+        if (!hit.part) continue;
         const mult = hit.part === 'head' ? this.cfg.player.headMultiplier : hit.part === 'limb' ? this.cfg.player.limbMultiplier : 1;
-        this.damageEnemy(hit.enemy, w.damage * mult * this.opts.damageScale, hit.part);
+        const first = this.enemies[hit.enemy]!;
+        const from = { x: first.pos.x, y: first.pos.y + CHEST_HEIGHT, z: first.pos.z };
+        this.damageEnemy(hit.enemy, damage * mult, hit.part, upgraded);
+        if (w.chain) this.chainFrom(hit.enemy, from, damage, w.chain.targets - 1, w.chain.range, upgraded);
       }
+    }
+  }
+
+  /** Daño en cadena: salta al enemigo más cercano que no haya recibido ya la descarga. */
+  private chainFrom(first: number, start: Vec3, damage: number, jumps: number, range: number, upgraded: boolean): void {
+    const hit = new Set<number>([first]);
+    let from = start;
+    for (let j = 0; j < jumps; j++) {
+      let best = -1;
+      let bestD = range;
+      for (const e of this.enemies) {
+        if (e.phase === 'inactive' || hit.has(e.index)) continue;
+        const d = Math.hypot(e.pos.x - from.x, e.pos.z - from.z);
+        if (d <= bestD) {
+          bestD = d;
+          best = e.index;
+        }
+      }
+      if (best < 0) return;
+      const e = this.enemies[best]!;
+      const to = { x: e.pos.x, y: e.pos.y + CHEST_HEIGHT, z: e.pos.z };
+      this.events.push({ type: 'chain', from, to });
+      hit.add(best);
+      this.damageEnemy(best, damage, 'torso', upgraded);
+      from = to;
     }
   }
 
   private startReload(slot: WeaponSlot, w: WeaponConfig): void {
     const p = this.player;
-    if (p.reloadTimer > 0 || slot.mag >= w.magazine || slot.reserve <= 0) return;
+    if (p.reloadTimer > 0 || slot.mag >= this.magazineOf(slot) || slot.reserve <= 0) return;
     p.reloadTimer = w.reloadSeconds;
     this.events.push({ type: 'reloadStart', weapon: w.id });
   }
@@ -368,15 +504,18 @@ export class Game {
       bestD = d;
     }
     this.events.push({ type: 'melee', hit: best >= 0 });
-    if (best >= 0) this.damageEnemy(best, m.damage * this.opts.damageScale, 'melee');
+    if (best >= 0) this.damageEnemy(best, m.damage * this.opts.damageScale, 'melee', false);
   }
+
+  // ------------------------------------------------------------------ interacción y compras
 
   private updateInteraction(input: PlayerInput): void {
     const p = this.player;
     const map = this.cfg.map;
     const range = this.cfg.player.useRange;
     const pressed = input.use && !this.prev.use;
-    let best: { d: number; act: () => void; prompt: Prompt; repair?: number } | null = null;
+    type Option = { d: number; act: () => void; prompt: Prompt; repair?: number };
+    let best: Option | null = null;
     const consider = (x: number, z: number, prompt: Prompt, act: () => void, repair?: number) => {
       const d = Math.hypot(p.pos.x - x, p.pos.z - z);
       if (d <= range && (!best || d < best.d)) best = repair === undefined ? { d, act, prompt } : { d, act, prompt, repair };
@@ -400,7 +539,44 @@ export class Game {
       for (const a of d.anchors) consider(a[0], a[1], { kind: 'openDoor', cost: d.cost }, () => this.openDoor(i));
     });
 
-    const chosen = best as { d: number; act: () => void; prompt: Prompt; repair?: number } | null;
+    // Energía.
+    if (!this.power) consider(map.powerSwitch.anchor[0], map.powerSwitch.anchor[1], { kind: 'powerSwitch' }, () => this.turnPowerOn());
+
+    // Sueros.
+    for (const st of map.perkStations) {
+      const perk = this.cfg.perks.perks[st.perk]!;
+      if (p.perks.includes(st.perk) || !this.perkStationOn(st.perk)) continue;
+      const [x, z] = st.anchor;
+      if (perk.needsPower && !this.power) consider(x, z, { kind: 'needPower' }, () => {});
+      else if (p.perks.length >= this.cfg.perks.maxPerks) consider(x, z, { kind: 'perkFull' }, () => {});
+      else consider(x, z, { kind: 'buyPerk', perk: st.perk, cost: perk.cost }, () => this.buyPerk(st.perk, perk.cost));
+    }
+
+    // El Contenedor.
+    const box = this.contenedor;
+    const spot = map.contenedorSpots[box.spot]!;
+    if (box.phase === 'idle') {
+      consider(spot.anchor[0], spot.anchor[1], { kind: 'buyContenedor', cost: this.cfg.contenedor.cost }, () => this.openContenedor());
+    } else if (box.phase === 'offering' && box.weapon) {
+      const weapon = box.weapon;
+      consider(spot.anchor[0], spot.anchor[1], { kind: 'takeWeapon', weapon }, () => this.takeContenedorWeapon());
+    }
+
+    // La Forja.
+    const forja = this.forja;
+    const [fx, fz] = map.forja.anchor;
+    const held = p.slots[p.current];
+    if (forja.phase === 'ready' && forja.slot) {
+      const weapon = forja.slot.weapon;
+      consider(fx, fz, { kind: 'takeForged', weapon }, () => this.takeForged());
+    } else if (forja.phase === 'idle') {
+      if (this.cfg.forja.needsPower && !this.power) consider(fx, fz, { kind: 'needPower' }, () => {});
+      else if (held && !held.upgraded) {
+        consider(fx, fz, { kind: 'forja', weapon: held.weapon, cost: this.cfg.forja.cost }, () => this.startForja());
+      }
+    }
+
+    const chosen = best as Option | null;
     this.prompt = chosen ? chosen.prompt : null;
 
     if (chosen?.repair !== undefined && input.use) {
@@ -437,26 +613,28 @@ export class Game {
     return true;
   }
 
-  private buyWeapon(id: string, cost: number): void {
-    if (!this.pay(cost)) return;
+  /** Mete un arma en una ranura libre o, si no hay, en lugar de la que se lleva en la mano. */
+  private giveWeapon(slot: WeaponSlot, prefer?: number): void {
     const p = this.player;
-    const w = this.weapon(id);
-    let slot = p.slots.findIndex((s) => s === null);
-    if (slot < 0) slot = p.current;
-    p.slots[slot] = { weapon: id, mag: w.magazine, reserve: w.reserve };
-    p.current = slot;
+    let i = prefer !== undefined && p.slots[prefer] === null ? prefer : p.slots.findIndex((s) => s === null);
+    if (i < 0) i = p.current;
+    p.slots[i] = slot;
+    p.current = i;
     p.switchTimer = this.cfg.player.weaponSwitchSeconds;
     p.reloadTimer = 0;
+  }
+
+  private buyWeapon(id: string, cost: number): void {
+    if (!this.pay(cost)) return;
+    this.giveWeapon(this.freshSlot(id));
     this.events.push({ type: 'purchase', what: 'weapon', id });
   }
 
   private buyAmmo(slot: WeaponSlot, cost: number): void {
-    const w = this.weapon(slot.weapon);
-    if (slot.mag >= w.magazine && slot.reserve >= w.reserve) return;
+    if (slot.mag >= this.magazineOf(slot) && slot.reserve >= this.reserveOf(slot)) return;
     if (!this.pay(cost)) return;
-    slot.mag = w.magazine;
-    slot.reserve = w.reserve;
-    this.events.push({ type: 'purchase', what: 'ammo', id: w.id });
+    this.fill(slot);
+    this.events.push({ type: 'purchase', what: 'ammo', id: slot.weapon });
   }
 
   private openDoor(i: number): void {
@@ -471,22 +649,269 @@ export class Game {
     this.events.push({ type: 'purchase', what: 'door', id: d.id });
   }
 
-  private addPoints(n: number): void {
-    if (n <= 0) return;
-    this.player.points += n;
-    this.events.push({ type: 'points', amount: n });
+  // ------------------------------------------------------------------ energía y sueros
+
+  private turnPowerOn(): void {
+    if (this.power) return;
+    this.power = true;
+    this.events.push({ type: 'powerOn' });
+  }
+
+  /** Si la estación de un suero funciona. La de Segundo aliento se apaga al agotar sus usos. */
+  perkStationOn(id: string): boolean {
+    const perk = this.cfg.perks.perks[id];
+    if (!perk) return false;
+    if (perk.selfRevivesPerGame > 0 && this.player.selfRevivesUsed >= perk.selfRevivesPerGame) return false;
+    return true;
+  }
+
+  private buyPerk(id: string, cost: number): void {
+    const p = this.player;
+    if (p.perks.includes(id) || p.perks.length >= this.cfg.perks.maxPerks) return;
+    if (!this.pay(cost)) return;
+    p.perks.push(id);
+    this.events.push({ type: 'purchase', what: 'perk', id });
+  }
+
+  /** Suero que levanta al jugador solo, si lo tiene y le quedan usos. */
+  private selfRevivePerk(): string | null {
+    for (const id of this.player.perks) {
+      const perk = this.cfg.perks.perks[id];
+      if (perk && perk.selfRevivesPerGame > 0 && this.player.selfRevivesUsed < perk.selfRevivesPerGame) return id;
+    }
+    return null;
+  }
+
+  private goDown(perkId: string): void {
+    const p = this.player;
+    const perk = this.cfg.perks.perks[perkId]!;
+    p.downed = true;
+    p.downTimer = perk.selfReviveSeconds;
+    p.selfRevivesUsed++;
+    // Al caer se pierden todos los sueros, también el que te levanta.
+    p.perks.length = 0;
+    p.health = 0;
+    p.reloadTimer = 0;
+    p.switchTimer = 0;
+    p.downedSlot = this.freshSlot(this.cfg.perks.downedWeapon);
+    this.events.push({ type: 'downed', revivesLeft: perk.selfRevivesPerGame - p.selfRevivesUsed });
+  }
+
+  private revive(): void {
+    const p = this.player;
+    p.downed = false;
+    p.downTimer = 0;
+    p.downedSlot = null;
+    p.reloadTimer = 0;
+    p.health = this.maxHealth();
+    p.sinceDamage = 0;
+    this.events.push({ type: 'revived' });
   }
 
   private hurtPlayer(enemy: number): void {
     const p = this.player;
-    if (!p.alive || this.opts.invulnerable) return;
+    if (!p.alive || p.downed || this.opts.invulnerable) return;
     p.health = Math.max(0, p.health - this.cfg.enemies.hitDamage);
     p.sinceDamage = 0;
     this.events.push({ type: 'playerHit', health: p.health, enemy });
-    if (p.health <= 0) {
-      p.alive = false;
-      this.round.phase = 'over';
-      this.events.push({ type: 'gameOver', round: this.round.number });
+    if (p.health > 0) return;
+    const revivePerk = this.selfRevivePerk();
+    if (revivePerk) {
+      this.goDown(revivePerk);
+      return;
+    }
+    p.alive = false;
+    this.round.phase = 'over';
+    this.events.push({ type: 'gameOver', round: this.round.number });
+  }
+
+  // ------------------------------------------------------------------ El Contenedor y La Forja
+
+  private rollMovesAfter(): number {
+    const c = this.cfg.contenedor;
+    return c.movesAfterMin + this.rng.int(c.movesAfterMax - c.movesAfterMin + 1);
+  }
+
+  private openContenedor(): void {
+    const box = this.contenedor;
+    if (box.phase !== 'idle' || !this.pay(this.cfg.contenedor.cost)) return;
+    // Nunca sale un arma que ya se lleva.
+    const owned = new Set(this.player.slots.filter((s): s is WeaponSlot => s !== null).map((s) => s.weapon));
+    if (this.forja.slot) owned.add(this.forja.slot.weapon);
+    const pool = this.cfg.contenedor.pool.filter((w) => !owned.has(w));
+    const list = pool.length > 0 ? pool : this.cfg.contenedor.pool;
+    box.weapon = list[this.rng.int(list.length)]!;
+    box.phase = 'spinning';
+    box.timer = this.cfg.contenedor.spinSeconds;
+    box.uses++;
+    this.events.push({ type: 'purchase', what: 'contenedor', id: box.weapon });
+  }
+
+  private takeContenedorWeapon(): void {
+    const box = this.contenedor;
+    if (box.phase !== 'offering' || !box.weapon) return;
+    const weapon = box.weapon;
+    this.giveWeapon(this.freshSlot(weapon));
+    this.events.push({ type: 'contenedorTaken', weapon });
+    this.closeContenedor();
+  }
+
+  /** Tras un uso: vuelve a esperar o, si toca, se traslada a otro hueco. */
+  private closeContenedor(): void {
+    const box = this.contenedor;
+    box.weapon = null;
+    if (box.uses >= box.movesAfter) {
+      box.phase = 'moving';
+      box.timer = this.cfg.contenedor.moveSeconds;
+      this.events.push({ type: 'contenedorMoving' });
+    } else {
+      box.phase = 'idle';
+    }
+  }
+
+  private startForja(): void {
+    const p = this.player;
+    const held = p.slots[p.current];
+    if (this.forja.phase !== 'idle' || !held || held.upgraded) return;
+    if (!this.pay(this.cfg.forja.cost)) return;
+    // El arma se queda en la máquina; se saca la otra si la hay.
+    this.forja.slot = held;
+    this.forja.phase = 'working';
+    this.forja.timer = this.cfg.forja.seconds;
+    p.slots[p.current] = null;
+    p.reloadTimer = 0;
+    const other = p.slots.findIndex((s) => s !== null);
+    if (other >= 0) {
+      p.current = other;
+      p.switchTimer = this.cfg.player.weaponSwitchSeconds;
+    }
+    this.events.push({ type: 'purchase', what: 'forja', id: held.weapon });
+  }
+
+  private takeForged(): void {
+    const f = this.forja;
+    if (f.phase !== 'ready' || !f.slot) return;
+    const slot = f.slot;
+    slot.upgraded = true;
+    this.fill(slot);
+    const empty = this.player.slots.findIndex((s) => s === null);
+    this.giveWeapon(slot, empty >= 0 ? empty : undefined);
+    f.slot = null;
+    f.phase = 'idle';
+    this.events.push({ type: 'forjaTaken', weapon: slot.weapon });
+  }
+
+  private updateMachines(): void {
+    const box = this.contenedor;
+    if (box.phase !== 'idle') {
+      box.timer -= SIM_DT;
+      if (box.timer <= 0) {
+        if (box.phase === 'spinning' && box.weapon) {
+          box.phase = 'offering';
+          box.timer = this.cfg.contenedor.offerSeconds;
+          this.events.push({ type: 'contenedorOffer', weapon: box.weapon });
+        } else if (box.phase === 'offering') {
+          this.closeContenedor(); // nadie la cogió: se pierde
+        } else if (box.phase === 'moving') {
+          const spots = this.cfg.map.contenedorSpots.length;
+          box.spot = (box.spot + 1 + this.rng.int(spots - 1)) % spots;
+          box.phase = 'idle';
+          box.uses = 0;
+          box.movesAfter = this.rollMovesAfter();
+          this.events.push({ type: 'contenedorMoved', spot: box.spot });
+        }
+      }
+    }
+    const f = this.forja;
+    if (f.phase === 'working') {
+      f.timer -= SIM_DT;
+      if (f.timer <= 0 && f.slot) {
+        f.phase = 'ready';
+        this.events.push({ type: 'forjaReady', weapon: f.slot.weapon });
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ puntos y power-ups
+
+  private addPoints(n: number): void {
+    if (n <= 0) return;
+    const amount = this.effects.puntosDobles > 0 ? n * 2 : n;
+    this.player.points += amount;
+    this.events.push({ type: 'points', amount });
+  }
+
+  private maybeDropPowerup(at: Vec3): void {
+    const pc = this.cfg.powerups;
+    if (this.round.powerupsDropped >= pc.maxPerRound || pc.kinds.length === 0) return;
+    if (this.rng.next() >= pc.dropChance) return;
+    this.dropPowerup(pc.kinds[this.rng.int(pc.kinds.length)]!, at.x, at.z);
+  }
+
+  /** Deja un power-up en el suelo. Público para pruebas. */
+  dropPowerup(kind: PowerupKind, x: number, z: number): number {
+    const slot = this.pickups.findIndex((pu) => !pu.active);
+    if (slot < 0) return -1;
+    const pu = this.pickups[slot]!;
+    pu.active = true;
+    pu.kind = kind;
+    pu.x = x;
+    pu.z = z;
+    pu.timer = this.cfg.powerups.lifetimeSeconds;
+    this.round.powerupsDropped++;
+    this.events.push({ type: 'powerupDrop', slot, kind });
+    return slot;
+  }
+
+  private updatePowerups(): void {
+    const pc = this.cfg.powerups;
+    const p = this.player;
+    for (const kind of ['bajaInstantanea', 'puntosDobles'] as const) {
+      if (this.effects[kind] > 0) {
+        this.effects[kind] = Math.max(0, this.effects[kind] - SIM_DT);
+        if (this.effects[kind] === 0) this.events.push({ type: 'effectEnd', kind });
+      }
+    }
+    this.pickups.forEach((pu, slot) => {
+      if (!pu.active) return;
+      pu.timer -= SIM_DT;
+      if (pu.timer <= 0) {
+        pu.active = false;
+        this.events.push({ type: 'powerupExpired', slot });
+        return;
+      }
+      if (Math.hypot(p.pos.x - pu.x, p.pos.z - pu.z) <= pc.pickupRadius) {
+        pu.active = false;
+        this.applyPowerup(pu.kind);
+      }
+    });
+  }
+
+  private applyPowerup(kind: PowerupKind): void {
+    const pc = this.cfg.powerups;
+    this.events.push({ type: 'powerupPickup', kind });
+    switch (kind) {
+      case 'municionCompleta':
+        for (const s of this.player.slots) if (s) this.fill(s);
+        if (this.player.downedSlot) this.fill(this.player.downedSlot);
+        if (this.forja.slot) this.fill(this.forja.slot);
+        break;
+      case 'bajaInstantanea':
+        this.effects.bajaInstantanea = pc.effectSeconds;
+        break;
+      case 'puntosDobles':
+        this.effects.puntosDobles = pc.effectSeconds;
+        break;
+      case 'ondaExpansiva':
+        // Todos los enemigos vivos caen, sin puntos por baja: solo la bonificación.
+        for (const e of this.enemies) {
+          if (e.phase === 'inactive') continue;
+          this.events.push({ type: 'hit', enemy: e.index, part: 'torso', killed: true });
+          this.removeEnemy(e);
+          this.round.kills++;
+        }
+        this.addPoints(pc.nukePoints);
+        break;
     }
   }
 
@@ -499,6 +924,7 @@ export class Game {
     r.toSpawn = enemyCount(n, this.cfg.rounds);
     r.spawnTimer = 0;
     r.repairPoints = 0;
+    r.powerupsDropped = 0;
     this.events.push({ type: 'roundStart', round: n });
   }
 
@@ -556,10 +982,22 @@ export class Game {
     return e;
   }
 
-  private damageEnemy(i: number, amount: number, part: HitPart | 'melee'): void {
+  /** Coloca un enemigo ya dentro, persiguiendo (pruebas). */
+  spawnEnemyInside(x: number, z: number): EnemyState | null {
+    const e = this.spawnEnemy(0);
+    if (!e) return null;
+    e.pos = { x, y: 0, z };
+    e.prevPos = { ...e.pos };
+    e.phase = 'chasing';
+    e.agent = this.nav.addAgent(e.pos, e.speed);
+    this.physics.setEnemy(e.index, true, e.pos);
+    return e;
+  }
+
+  private damageEnemy(i: number, amount: number, part: HitPart | 'melee', upgraded: boolean, fromWave = false): void {
     const e = this.enemies[i]!;
     if (e.phase === 'inactive') return;
-    e.health -= amount;
+    e.health -= this.effects.bajaInstantanea > 0 ? e.health : amount;
     const hitPart: HitPart = part === 'melee' ? 'torso' : part;
     const eco = this.cfg.economy;
     if (e.health > 0) {
@@ -569,8 +1007,25 @@ export class Game {
     }
     this.events.push({ type: 'hit', enemy: i, part: hitPart, killed: true });
     this.addPoints(part === 'melee' ? eco.killMelee : part === 'head' ? eco.killHead : eco.killBody);
+    // Los power-ups solo caen dentro del edificio, donde el jugador puede cogerlos.
+    const w = this.cfg.map.windows[e.window]!;
+    const dropAt = e.phase === 'chasing' ? { ...e.pos } : { x: w.inside[0], y: 0, z: w.inside[1] };
+    const at = { ...e.pos };
     this.removeEnemy(e);
     this.round.kills++;
+    this.maybeDropPowerup(dropAt);
+    if (upgraded && !fromWave) this.ashWave(at);
+  }
+
+  /** Efecto de La Forja: onda de ceniza que daña a los enemigos cercanos. No encadena otras ondas. */
+  private ashWave(at: Vec3): void {
+    const fw = this.cfg.forja.ashWave;
+    const damage = enemyHealth(Math.max(1, this.round.number), this.cfg.rounds) * fw.roundHealthFraction;
+    this.events.push({ type: 'ashWave', at });
+    for (const e of this.enemies) {
+      if (e.phase === 'inactive') continue;
+      if (Math.hypot(e.pos.x - at.x, e.pos.z - at.z) <= fw.radius) this.damageEnemy(e.index, damage, 'torso', true, true);
+    }
   }
 
   private removeEnemy(e: EnemyState): void {

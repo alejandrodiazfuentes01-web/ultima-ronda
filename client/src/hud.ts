@@ -3,10 +3,41 @@
  * salen de una reserva fija de elementos (regla 5).
  */
 import type { Game } from '../../shared/sim/game';
-import type { SimEvent } from '../../shared/sim/types';
-import { formatNumber, t, weaponName } from './i18n';
+import type { Prompt, SimEvent } from '../../shared/sim/types';
+import { formatNumber, perkName, t, weaponName } from './i18n';
 
 const FLOAT_POOL = 12;
+
+/** Texto del aviso de interacción, con su precio. */
+export function promptText(pr: Prompt): string {
+  const cost = 'cost' in pr ? formatNumber(pr.cost) : '';
+  switch (pr.kind) {
+    case 'repair':
+      return t('prompt.repair');
+    case 'buyWeapon':
+      return t('prompt.buyWeapon', { weapon: weaponName(pr.weapon), cost });
+    case 'buyAmmo':
+      return t('prompt.buyAmmo', { weapon: weaponName(pr.weapon), cost });
+    case 'openDoor':
+      return t('prompt.openDoor', { cost });
+    case 'powerSwitch':
+      return t('prompt.powerSwitch');
+    case 'needPower':
+      return t('prompt.needPower');
+    case 'buyPerk':
+      return t('prompt.buyPerk', { perk: perkName(pr.perk), cost });
+    case 'perkFull':
+      return t('prompt.perkFull');
+    case 'buyContenedor':
+      return t('prompt.buyContenedor', { cost });
+    case 'takeWeapon':
+      return t('prompt.takeWeapon', { weapon: weaponName(pr.weapon) });
+    case 'forja':
+      return t('prompt.forja', { weapon: weaponName(pr.weapon), cost });
+    case 'takeForged':
+      return t('prompt.takeForged', { weapon: weaponName(pr.weapon) });
+  }
+}
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -104,13 +135,7 @@ export class Hud {
     this.deniedTimer = Math.max(0, this.deniedTimer - dt);
     let prompt = '';
     if (this.deniedTimer > 0) prompt = t('prompt.denied');
-    else if (game.prompt) {
-      const pr = game.prompt;
-      if (pr.kind === 'repair') prompt = t('prompt.repair');
-      else if (pr.kind === 'buyWeapon') prompt = t('prompt.buyWeapon', { weapon: weaponName(pr.weapon), cost: formatNumber(pr.cost) });
-      else if (pr.kind === 'buyAmmo') prompt = t('prompt.buyAmmo', { weapon: weaponName(pr.weapon), cost: formatNumber(pr.cost) });
-      else prompt = t('prompt.openDoor', { cost: formatNumber(pr.cost) });
-    }
+    else if (game.prompt) prompt = promptText(game.prompt);
     if (prompt !== this.last.prompt) {
       this.prompt.textContent = this.last.prompt = prompt;
       this.prompt.hidden = prompt === '';

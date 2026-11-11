@@ -37,5 +37,15 @@
   "renderer.webgl2": "WebGL 2",
   "perf.line": "{fps} FPS · 1% low {low} · {calls} draw calls · {tris} triangles · {backend}",
   "error.noGraphics": "Your browser can't display 3D graphics. Try a recent version of Chrome, Edge, Firefox or Safari.",
-  "error.pointerLock": "Couldn't capture the mouse. Click again."
+  "error.pointerLock": "Couldn't capture the mouse. Click again.",
+  "prompt.powerSwitch": "E · turn the power on",
+  "prompt.needPower": "Needs power",
+  "prompt.buyPerk": "E · {perk} serum · {cost}",
+  "prompt.perkFull": "You already carry the maximum serums",
+  "prompt.buyContenedor": "E · open El Contenedor · {cost}",
+  "prompt.takeWeapon": "E · take {weapon}",
+  "prompt.forja": "E · upgrade {weapon} at La Forja · {cost}",
+  "prompt.takeForged": "E · collect upgraded {weapon}",
+  "perk.coraza": "Coraza",
+  "perk.segundoAliento": "Segundo aliento"
 }

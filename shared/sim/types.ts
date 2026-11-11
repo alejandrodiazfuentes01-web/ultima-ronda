@@ -47,13 +47,13 @@ export function emptyInput(): PlayerInput {
 export type HitPart = 'head' | 'torso' | 'limb';
 
 export type SimEvent =
-  | { type: 'shot'; weapon: string }
+  | { type: 'shot'; weapon: string; upgraded: boolean }
   | { type: 'dryFire'; weapon: string }
   | { type: 'hit'; enemy: number; part: HitPart; killed: boolean }
   | { type: 'points'; amount: number }
   | { type: 'melee'; hit: boolean }
   | { type: 'reloadStart'; weapon: string }
-  | { type: 'purchase'; what: 'weapon' | 'ammo' | 'door'; id: string }
+  | { type: 'purchase'; what: 'weapon' | 'ammo' | 'door' | 'perk' | 'contenedor' | 'forja'; id: string }
   | { type: 'denied'; cost: number }
   | { type: 'roundStart'; round: number }
   | { type: 'roundEnd'; round: number }
@@ -62,13 +62,36 @@ export type SimEvent =
   | { type: 'plankRepaired'; window: number }
   | { type: 'enemySpawned'; enemy: number }
   | { type: 'enemyEntered'; enemy: number }
+  | { type: 'powerOn' }
+  | { type: 'downed'; revivesLeft: number }
+  | { type: 'revived' }
+  | { type: 'contenedorOffer'; weapon: string }
+  | { type: 'contenedorTaken'; weapon: string }
+  | { type: 'contenedorMoving' }
+  | { type: 'contenedorMoved'; spot: number }
+  | { type: 'forjaReady'; weapon: string }
+  | { type: 'forjaTaken'; weapon: string }
+  | { type: 'chain'; from: Vec3; to: Vec3 }
+  | { type: 'ashWave'; at: Vec3 }
+  | { type: 'powerupDrop'; slot: number; kind: string }
+  | { type: 'powerupPickup'; kind: string }
+  | { type: 'powerupExpired'; slot: number }
+  | { type: 'effectEnd'; kind: string }
   | { type: 'gameOver'; round: number };
 
 export type Prompt =
   | { kind: 'repair' }
   | { kind: 'buyWeapon'; weapon: string; cost: number }
   | { kind: 'buyAmmo'; weapon: string; cost: number }
-  | { kind: 'openDoor'; cost: number };
+  | { kind: 'openDoor'; cost: number }
+  | { kind: 'powerSwitch' }
+  | { kind: 'needPower' }
+  | { kind: 'buyPerk'; perk: string; cost: number }
+  | { kind: 'perkFull' }
+  | { kind: 'buyContenedor'; cost: number }
+  | { kind: 'takeWeapon'; weapon: string }
+  | { kind: 'forja'; weapon: string; cost: number }
+  | { kind: 'takeForged'; weapon: string };
 
 /** Opciones para pruebas y para el jugador automático. El juego normal no las usa. */
 export interface SimOptions {

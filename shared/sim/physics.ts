@@ -2,7 +2,7 @@
  * Mundo físico (Rapier): muros, ventanas, puertas, el jugador y las cápsulas
  * de impacto de los enemigos. Los disparos son rayos instantáneos.
  */
-import type { Box, MapConfig } from '../config';
+import type { Box, Fixture, MapConfig } from '../config';
 import { RAPIER } from './libs';
 import type { HitPart, Vec3 } from './types';
 
@@ -38,6 +38,11 @@ const ENEMY_PARTS: Array<{ part: HitPart; y: number; halfHeight: number; radius:
   { part: 'torso', y: 1.15, halfHeight: 0.22, radius: 0.26 },
   { part: 'limb', y: 0.45, halfHeight: 0.25, radius: 0.22 },
 ];
+
+/** Objetos sólidos del mapa con los que se interactúa: interruptor, estaciones, Forja, huecos del Contenedor. */
+export function fixtures(map: MapConfig): Fixture[] {
+  return [map.powerSwitch, ...map.perkStations, map.forja, ...map.contenedorSpots];
+}
 
 function cuboid(world: World, b: Box, g: number): Collider {
   const desc = RAPIER.ColliderDesc.cuboid((b[3] - b[0]) / 2, (b[4] - b[1]) / 2, (b[5] - b[2]) / 2)
@@ -77,6 +82,7 @@ export class Physics {
       cuboid(this.world, [x0, map.sillHeight, z0, x1, map.windowTop, z1], G_WINDOW_BLOCK);
     }
     for (const d of map.doors) this.doorColliders.push(cuboid(this.world, d.box, G_WORLD));
+    for (const f of fixtures(map)) cuboid(this.world, f.box, G_WORLD);
 
     // Jugador: cápsula movida por el controlador de personaje.
     this.playerBody = this.world.createRigidBody(
@@ -143,6 +149,28 @@ export class Physics {
   /** Avanza el mundo: aplica los movimientos pedidos y actualiza las consultas de rayos. */
   step(): void {
     this.world.step();
+  }
+
+  /**
+   * Rayo que atraviesa hasta `maxEnemies` enemigos distintos y se para en el escenario.
+   * Devuelve los impactos en orden de distancia.
+   */
+  raycastPierce(origin: Vec3, dir: Vec3, maxDistance: number, maxEnemies: number): RayHit[] {
+    const hits: RayHit[] = [];
+    const skip = new Set<number>();
+    const ray = new RAPIER.Ray(origin, dir);
+    for (let i = 0; i < maxEnemies; i++) {
+      const hit = this.world.castRay(ray, maxDistance, true, undefined, G_RAY, undefined, undefined, (c) => {
+        const part = this.enemyParts.get(c.handle);
+        return !part || !skip.has(part.enemy);
+      });
+      if (!hit) break;
+      const part = this.enemyParts.get(hit.collider.handle);
+      if (!part) break; // escenario: la bala se para
+      skip.add(part.enemy);
+      hits.push({ distance: hit.timeOfImpact, enemy: part.enemy, part: part.part });
+    }
+    return hits;
   }
 
   raycast(origin: Vec3, dir: Vec3, maxDistance: number): RayHit | null {

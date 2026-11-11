@@ -47,3 +47,9 @@ export function weaponName(id: string): string {
   const key = `weapon.${id}` as TextKey;
   return key in TABLES[current] ? t(key) : id;
 }
+
+/** Nombre visible de un suero. */
+export function perkName(id: string): string {
+  const key = `perk.${id}` as TextKey;
+  return key in TABLES[current] ? t(key) : id;
+}
