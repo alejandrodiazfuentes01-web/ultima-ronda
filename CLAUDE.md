@@ -16,7 +16,7 @@ El documento de diseño completo es `docs/GDD.md`. Léelo entero antes de la pri
 ## Tecnología
 
 - TypeScript en modo estricto, Vite.
-- Three.js con `WebGPURenderer` de `three/webgpu` (cae a WebGL 2 de forma automática). La elección definitiva de renderizador se toma al cerrar la fase 1, midiendo ambos caminos.
+- Three.js con `WebGPURenderer` de `three/webgpu` (cae a WebGL 2 de forma automática). Decidido el 2026-11-11, tras probar el prototipo gris: se queda así. `?renderer=webgl` sigue sirviendo para forzar WebGL 2 al medir.
 - Rapier para física, colisiones y trazado de rayos.
 - recast-navigation-js para la malla de navegación y la multitud de enemigos.
 - Web Audio API para el sonido posicional.

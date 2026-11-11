@@ -285,6 +285,8 @@ Sobre el renderizador hay una decisión abierta que se cierra al final del proto
 
 Por eso el prototipo mide los dos caminos en el equipo objetivo más modesto. Mientras tanto, una regla mantiene ambos abiertos: nada de sombreadores GLSL a medida. Solo materiales integrados o nodos TSL.
 
+Decisión tomada el 11 de noviembre de 2026, con el prototipo gris: `WebGPURenderer` con caída automática a WebGL 2. El rendimiento fue bueno y es la opción más compatible. La regla de no usar sombreadores GLSL a medida se mantiene, para que el camino WebGL 2 siga funcionando igual.
+
 Presupuestos que el juego no puede superar:
 
 | Recurso | Límite |
