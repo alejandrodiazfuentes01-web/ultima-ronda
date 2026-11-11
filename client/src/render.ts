@@ -124,16 +124,21 @@ export class GameView {
       const out = new THREE.Vector2(w.outside[0] - w.inside[0], w.outside[1] - w.inside[1]).normalize();
       for (let i = 0; i < map.planksPerWindow; i++) {
         const y = map.sillHeight + ((i + 0.5) / map.planksPerWindow) * span;
-        const tilt = (i % 2 === 0 ? 1 : -1) * 0.07;
-        const cx = alongX ? (x0 + x1) / 2 : (out.x > 0 ? x1 : x0) + out.x * 0.05;
-        const cz = alongX ? (out.y > 0 ? z1 : z0) + out.y * 0.05 : (z0 + z1) / 2;
+        // Ligera inclinación alterna, para que parezcan atornilladas a mano.
+        const tilt = (i % 2 === 0 ? 1 : -1) * 0.03;
+        // En la cara interior del muro, donde el jugador las ve y las repara.
+        const cx = alongX ? (x0 + x1) / 2 : (out.x > 0 ? x0 : x1) - out.x * 0.04;
+        const cz = alongX ? (out.y > 0 ? z0 : z1) - out.y * 0.04 : (z0 + z1) / 2;
         const len = (alongX ? x1 - x0 : z1 - z0) + 0.3;
         tmpPos.set(cx, y, cz);
         tmpQuat.setFromEuler(new THREE.Euler(alongX ? 0 : tilt, alongX ? 0 : Math.PI / 2, alongX ? tilt : 0));
-        tmpScale.set(len, span / map.planksPerWindow - 0.05, 0.06);
+        tmpScale.set(len, span / map.planksPerWindow - 0.04, 0.05);
         this.plankMatrices.push(new THREE.Matrix4().compose(tmpPos, tmpQuat, tmpScale));
       }
     }
+    // Las instancias están repartidas por todo el mapa: sin esto, Three.js las descartaba
+    // al acercarse a una ventana porque solo miraba la caja de origen.
+    this.planks.frustumCulled = false;
     this.scene.add(this.planks);
 
     // Enemigos: cuerpo y cabeza, reserva fija.
