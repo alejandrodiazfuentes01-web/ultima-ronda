@@ -4,7 +4,7 @@ Versión del 9 de noviembre de 2026. Documento de diseño de referencia del proy
 
 ## Resumen y supuestos
 
-El plan lleva a un shooter 3D en primera persona de supervivencia por rondas, jugable en el navegador sin instalar nada, con lanzamiento público en unos 11 meses. Reproduce las mecánicas y el ritmo de Black Ops 3 Zombies, con nombre, mundo, personajes, arte y sonido propios. Nombre provisional del proyecto: **Última Ronda**.
+El plan lleva a un shooter 3D en primera persona de supervivencia por rondas, jugable en el navegador sin instalar nada, con lanzamiento público en unos 11 meses. Reproduce las mecánicas y el ritmo de Black Ops 3 Zombies, con nombre, mundo, personajes, arte y sonido propios. Nombre definitivo del proyecto: **Última Ronda**.
 
 La estrategia es lanzar dos veces. Primero una versión en solitario, pública y gratuita, al terminar la alfa. Después el cooperativo de 2 a 4 jugadores, que es la parte más cara y arriesgada.
 
@@ -492,7 +492,7 @@ Coste estimado hasta el lanzamiento, a confirmar: dominio, unos 15 € al año; 
 
 ### Las dos primeras semanas
 
-- [ ] Decidir el nombre definitivo y comprobar que no existe como marca ni como juego.
+- [x] Decidir el nombre definitivo y comprobar que no existe como marca ni como juego.
 - [ ] Crear el repositorio con las carpetas `shared/`, `client/` y `server/`, TypeScript y Vite.
 - [ ] Montar el despliegue automático a un dominio de pruebas con HTTPS. WebGPU solo funciona en contexto seguro.
 - [ ] Poner en pantalla una sala de cajas grises con control en primera persona y captura de ratón.

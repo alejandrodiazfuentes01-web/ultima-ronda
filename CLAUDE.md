@@ -1,4 +1,4 @@
-# Última Ronda (nombre provisional)
+# Última Ronda
 
 Shooter 3D en primera persona de supervivencia por rondas contra zombis, para navegador de escritorio. Reproduce las mecánicas del género (rondas, puntos, puertas, armas de pared, caja aleatoria, ventajas, mejora de armas) con nombre, mundo, arte y sonido propios.
 
