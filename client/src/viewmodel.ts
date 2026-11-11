@@ -6,20 +6,7 @@
 import * as THREE from 'three/webgpu';
 import type { Game } from '../../shared/sim/game';
 import type { SimEvent } from '../../shared/sim/types';
-
-/** Forma en cajas grises de cada arma: piezas [ancho, alto, largo, x, y, z]. */
-const SHAPES: Record<string, Array<[number, number, number, number, number, number]>> = {
-  m1911: [
-    [0.035, 0.045, 0.2, 0, 0, -0.05],
-    [0.03, 0.09, 0.04, 0, -0.06, 0.02],
-  ],
-  smg5: [
-    [0.045, 0.06, 0.34, 0, 0, -0.1],
-    [0.03, 0.1, 0.035, 0, -0.07, 0.0],
-    [0.025, 0.09, 0.03, 0, -0.06, -0.14],
-    [0.03, 0.05, 0.14, 0, -0.005, 0.12],
-  ],
-};
+import { WEAPON_SHAPES, buildWeapon } from './weaponShapes';
 
 /** Retroceso visual según el nivel de weapons.json. */
 const RECOIL_KICK: Record<string, number> = { none: 0, low: 0.012, medium: 0.03, high: 0.05, veryHigh: 0.07 };
@@ -37,17 +24,14 @@ export class Viewmodel {
   private bobPhase = 0;
 
   constructor(camera: THREE.Camera) {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.55, metalness: 0.4 });
-    for (const [id, parts] of Object.entries(SHAPES)) {
-      const g = new THREE.Group();
-      for (const [w, h, l, x, y, z] of parts) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat);
-        m.position.set(x, y, z);
-        g.add(m);
+    // Todas las armas, normales y mejoradas, se crean al arrancar (regla 5): luego solo se muestran u ocultan.
+    for (const id of Object.keys(WEAPON_SHAPES)) {
+      for (const upgraded of [false, true]) {
+        const g = buildWeapon(id, upgraded);
+        g.visible = false;
+        this.guns.set(`${id}:${upgraded}`, g);
+        this.root.add(g);
       }
-      g.visible = false;
-      this.guns.set(id, g);
-      this.root.add(g);
     }
     this.flash = new THREE.Mesh(
       new THREE.SphereGeometry(0.035, 8, 6),
@@ -67,14 +51,15 @@ export class Viewmodel {
     }
   }
 
-  update(game: Game, weapon: string | null, dt: number): void {
-    if (weapon !== this.shown) {
-      for (const [id, g] of this.guns) g.visible = id === weapon;
-      this.shown = weapon;
+  update(game: Game, weapon: string | null, upgraded: boolean, dt: number): void {
+    const key = weapon ? `${weapon}:${upgraded}` : null;
+    if (key !== this.shown) {
+      for (const [id, g] of this.guns) g.visible = id === key;
+      this.shown = key;
     }
     const p = game.player;
     const cfg = weapon ? game.cfg.weapons[weapon] : undefined;
-    const front = SHAPES[weapon ?? '']?.[0];
+    const front = WEAPON_SHAPES[weapon ?? '']?.[0];
 
     // Fogonazo en la boca del arma.
     this.flashTime -= dt;
@@ -92,7 +77,7 @@ export class Viewmodel {
 
     // Recarga y cambio de arma: el arma baja y vuelve.
     let lower = 0;
-    if (p.reloadTimer > 0 && cfg) lower = Math.sin(Math.PI * (1 - p.reloadTimer / cfg.reloadSeconds)) * 0.18;
+    if (p.reloadTimer > 0 && cfg && !p.downed) lower = Math.sin(Math.PI * (1 - p.reloadTimer / cfg.reloadSeconds)) * 0.18;
     const sw = game.cfg.player.weaponSwitchSeconds;
     if (p.switchTimer > 0 && sw > 0) lower = Math.max(lower, (p.switchTimer / sw) * 0.25);
 

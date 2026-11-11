@@ -44,6 +44,11 @@ export function fixtures(map: MapConfig): Fixture[] {
   return [map.powerSwitch, ...map.perkStations, map.forja, ...map.contenedorSpots];
 }
 
+/** Todas las cajas sólidas que no son muros: objetos de uso y decorado. */
+export function solidBoxes(map: MapConfig): Box[] {
+  return [...fixtures(map).map((f) => f.box), ...map.decor.map((d) => d.box)];
+}
+
 function cuboid(world: World, b: Box, g: number): Collider {
   const desc = RAPIER.ColliderDesc.cuboid((b[3] - b[0]) / 2, (b[4] - b[1]) / 2, (b[5] - b[2]) / 2)
     .setTranslation((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2)
@@ -82,7 +87,7 @@ export class Physics {
       cuboid(this.world, [x0, map.sillHeight, z0, x1, map.windowTop, z1], G_WINDOW_BLOCK);
     }
     for (const d of map.doors) this.doorColliders.push(cuboid(this.world, d.box, G_WORLD));
-    for (const f of fixtures(map)) cuboid(this.world, f.box, G_WORLD);
+    for (const b of solidBoxes(map)) cuboid(this.world, b, G_WORLD);
 
     // Jugador: cápsula movida por el controlador de personaje.
     this.playerBody = this.world.createRigidBody(

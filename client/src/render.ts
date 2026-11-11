@@ -1,5 +1,5 @@
 /**
- * Dibuja la partida en cajas grises. Solo lee el estado de la simulación e
+ * Dibuja la partida: el Vestíbulo en cajas grises y el Laboratorio con su arte. Solo lee el estado de la simulación e
  * interpola entre el paso anterior y el actual (regla 2).
  * Escenario en una sola malla; enemigos y planchas en mallas instanciadas
  * de tamaño fijo (regla 5): pocas llamadas de dibujo y nada se crea en plena horda.
@@ -9,7 +9,17 @@ import type { Box, MapConfig } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { EYE_HEIGHT } from '../../shared/sim/physics';
 import type { SimEvent } from '../../shared/sim/types';
+import { Effects } from './effects';
+import { Props } from './props';
+import { labFloorTexture, labWallTexture } from './textures';
 import { Viewmodel } from './viewmodel';
+
+/** Límite entre el Vestíbulo (gris) y el Laboratorio (con arte), en x. */
+const LAB_X = 12;
+/** Metros que cubre una repetición de las texturas del Laboratorio. */
+const TEXTURE_METERS = 2;
+/** Altura de los ojos al estar caído. */
+const DOWNED_EYE = 0.55;
 
 const COLORS = {
   sky: 0x10151b,
@@ -23,25 +33,55 @@ const COLORS = {
   enemyHead: 0x5d6270,
 };
 
-/** Une varias cajas en una sola geometría para dibujarlas de una vez. */
+/**
+ * Une varias cajas en una sola geometría para dibujarlas de una vez. Las
+ * coordenadas de textura salen de la posición en el mundo, así que la textura
+ * se repite igual en todas las paredes, sin estirarse.
+ */
 function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
   const pos: number[] = [];
   const nor: number[] = [];
+  const uv: number[] = [];
   const idx: number[] = [];
   for (const b of boxes) {
     const g = new THREE.BoxGeometry(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     g.translate((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
     const base = pos.length / 3;
-    pos.push(...(g.getAttribute('position').array as Float32Array));
-    nor.push(...(g.getAttribute('normal').array as Float32Array));
+    const P = g.getAttribute('position').array as Float32Array;
+    const N = g.getAttribute('normal').array as Float32Array;
+    for (let i = 0; i < P.length; i += 3) {
+      const [x, y, z] = [P[i]!, P[i + 1]!, P[i + 2]!];
+      const [nx, ny] = [Math.abs(N[i]!), Math.abs(N[i + 1]!)];
+      // Proyección según hacia dónde mira la cara.
+      const [u, v] = nx > 0.5 ? [z, y] : ny > 0.5 ? [x, z] : [x, y];
+      uv.push(u / TEXTURE_METERS, v / TEXTURE_METERS);
+    }
+    pos.push(...P);
+    nor.push(...N);
     for (const i of g.getIndex()!.array) idx.push(base + i);
     g.dispose();
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   out.setIndex(idx);
   return out;
+}
+
+/** Parte las cajas que cruzan el límite del Laboratorio: [vestíbulo, laboratorio]. */
+function splitAtLab(boxes: Box[]): [Box[], Box[]] {
+  const left: Box[] = [];
+  const right: Box[] = [];
+  for (const b of boxes) {
+    if (b[3] <= LAB_X) left.push(b);
+    else if (b[0] >= LAB_X - 0.2) right.push(b);
+    else {
+      left.push([b[0], b[1], b[2], LAB_X - 0.2, b[4], b[5]]);
+      right.push([LAB_X - 0.2, b[1], b[2], b[3], b[4], b[5]]);
+    }
+  }
+  return [left, right];
 }
 
 /** Ancho de cada plancha metálica en metros (aspecto, no balance). */
@@ -80,17 +120,24 @@ export class GameView {
   private readonly plankMatrices: THREE.Matrix4[] = [];
   private readonly doors: THREE.Mesh[] = [];
   private readonly planksPerWindow: number;
+  private readonly props: Props;
+  private readonly effects: Effects;
+  private time = 0;
 
   constructor(map: MapConfig, poolSize: number) {
     this.scene.background = new THREE.Color(COLORS.sky);
-    this.scene.fog = new THREE.Fog(COLORS.sky, 10, 38);
+    this.scene.fog = new THREE.Fog(COLORS.sky, 6, 30);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
 
-    this.scene.add(new THREE.HemisphereLight(0xc8d6e5, 0x2a2420, 1.1));
-    const sun = new THREE.DirectionalLight(0xffe2bd, 2.0);
-    sun.position.set(8, 14, 5);
-    this.scene.add(sun);
+    // Noche en la montaña: luz de luna fría y poca luz ambiente. Dentro, bombillas cálidas.
+    this.scene.add(new THREE.HemisphereLight(0x8fa6c4, 0x1c1814, 0.55));
+    const moon = new THREE.DirectionalLight(0xa9c2e8, 0.9);
+    moon.position.set(-6, 14, -8);
+    this.scene.add(moon);
+    const hall = new THREE.PointLight(0xffc98a, 14, 14, 1.6);
+    hall.position.set(6, 2.9, 6);
+    this.scene.add(hall);
 
     // Suelo.
     this.scene.add(new THREE.Mesh(boxesGeometry([map.floor]), new THREE.MeshStandardMaterial({ color: COLORS.floor, roughness: 1 })));
@@ -101,7 +148,13 @@ export class GameView {
       const [x0, z0, x1, z1] = w.opening;
       walls.push([x0, 0, z0, x1, map.sillHeight, z1], [x0, map.windowTop, z0, x1, map.wallHeight, z1]);
     }
-    this.scene.add(new THREE.Mesh(boxesGeometry(walls), new THREE.MeshStandardMaterial({ color: COLORS.wall, roughness: 0.9 })));
+    const [hallWalls, labWalls] = splitAtLab(walls);
+    this.scene.add(new THREE.Mesh(boxesGeometry(hallWalls), new THREE.MeshStandardMaterial({ color: COLORS.wall, roughness: 0.9 })));
+    this.scene.add(new THREE.Mesh(boxesGeometry(labWalls), new THREE.MeshStandardMaterial({ map: labWallTexture(), roughness: 0.75, metalness: 0.15 })));
+    // Suelo de baldosas del Laboratorio, apenas por encima del suelo general.
+    this.scene.add(
+      new THREE.Mesh(boxesGeometry([[LAB_X, 0, 0, 24, 0.004, 12]]), new THREE.MeshStandardMaterial({ map: labFloorTexture(), roughness: 0.85 })),
+    );
 
     // Compuertas.
     const doorMat = new THREE.MeshStandardMaterial({ color: COLORS.door, roughness: 0.6, metalness: 0.2 });
@@ -178,6 +231,8 @@ export class GameView {
     this.scene.add(this.enemyBodies, this.enemyHeads);
 
     this.viewmodel = new Viewmodel(this.camera);
+    this.props = new Props(this.scene, map);
+    this.effects = new Effects(this.scene);
   }
 
   resize(width: number, height: number): void {
@@ -185,15 +240,18 @@ export class GameView {
     this.camera.updateProjectionMatrix();
   }
 
-  onEvent(ev: SimEvent): void {
+  onEvent(ev: SimEvent, game: Game): void {
     this.viewmodel.onEvent(ev);
+    this.effects.onEvent(ev, game);
   }
 
   /** Coloca todo según el estado, interpolando con `alpha` entre el paso anterior y el actual. */
   update(game: Game, alpha: number, yaw: number, pitch: number, frameSeconds: number): void {
     const p = game.player;
     const lerp = (a: number, b: number) => a + (b - a) * alpha;
-    this.camera.position.set(lerp(p.prevPos.x, p.pos.x), lerp(p.prevPos.y, p.pos.y) + EYE_HEIGHT, lerp(p.prevPos.z, p.pos.z));
+    this.time += frameSeconds;
+    const eye = p.downed ? DOWNED_EYE : EYE_HEIGHT;
+    this.camera.position.set(lerp(p.prevPos.x, p.pos.x), lerp(p.prevPos.y, p.pos.y) + eye, lerp(p.prevPos.z, p.pos.z));
     this.camera.rotation.set(pitch, yaw, 0);
 
     for (const e of game.enemies) {
@@ -225,7 +283,9 @@ export class GameView {
       this.doors[i]!.visible = !d.open;
     });
 
-    const slot = p.slots[p.current];
-    this.viewmodel.update(game, slot?.weapon ?? null, frameSeconds);
+    const slot = game.activeSlot();
+    this.viewmodel.update(game, slot?.weapon ?? null, slot?.upgraded ?? false, frameSeconds);
+    this.props.update(game, frameSeconds, this.time);
+    this.effects.update(game, frameSeconds, this.time);
   }
 }

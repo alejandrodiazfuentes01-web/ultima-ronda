@@ -34,4 +34,30 @@ describe('reglas de arquitectura', () => {
     }
     expect(readFileSync(join(root, 'client', 'index.html'), 'utf8')).not.toMatch(/(src|href)=["']https?:/);
   });
+
+  it('cada modelo del mapa existe y está apuntado en docs/LICENCIAS.md', () => {
+    const map = JSON.parse(readFileSync(join(root, 'shared', 'data', 'maps', 'prototipo.json'), 'utf8')) as Record<string, unknown>;
+    const models = new Set<string>();
+    const collect = (x: unknown): void => {
+      if (Array.isArray(x)) x.forEach(collect);
+      else if (x && typeof x === 'object') {
+        for (const [k, v] of Object.entries(x)) {
+          if (k === 'model' && typeof v === 'string') models.add(v);
+          else collect(v);
+        }
+      }
+    };
+    collect(map);
+    expect(models.size).toBeGreaterThan(0);
+    const licences = readFileSync(join(root, 'docs', 'LICENCIAS.md'), 'utf8');
+    for (const m of models) {
+      expect(statSync(join(root, 'client', 'public', 'models', `${m}.glb`)).isFile(), m).toBe(true);
+      expect(licences, `${m} en LICENCIAS.md`).toContain(`models/${m}.glb`);
+    }
+  });
+
+  it('ningún archivo de assets queda sin apuntar en docs/LICENCIAS.md', () => {
+    const licences = readFileSync(join(root, 'docs', 'LICENCIAS.md'), 'utf8');
+    for (const f of readdirSync(join(root, 'client', 'public', 'models'))) expect(licences, f).toContain(`models/${f}`);
+  });
 });

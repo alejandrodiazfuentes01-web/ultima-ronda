@@ -5,7 +5,7 @@
 import { Crowd, type CrowdAgent, type NavMesh, NavMeshQuery } from '@recast-navigation/core';
 import { generateSoloNavMesh } from '@recast-navigation/generators';
 import type { MapConfig } from '../config';
-import { fixtures } from './physics';
+import { solidBoxes } from './physics';
 import type { Vec3 } from './types';
 
 /** Medidas del agente (geometría, no balance). */
@@ -29,8 +29,7 @@ export class Navigation {
       indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
     }
     // Los objetos sólidos del mapa se añaden como cajas: el suelo bajo ellos deja de ser transitable.
-    for (const f of fixtures(map)) {
-      const [x0, y0, z0, x1, y1, z1] = f.box;
+    for (const [x0, y0, z0, x1, y1, z1] of solidBoxes(map)) {
       const base = positions.length / 3;
       for (const [x, y, z] of [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]] as const) {
         positions.push(x, y, z);

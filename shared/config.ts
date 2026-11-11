@@ -211,11 +211,21 @@ export interface MapConfig {
   perkStations: Array<Fixture & { perk: string }>;
   forja: Fixture;
   contenedorSpots: Fixture[];
+  decor: Decor[];
 }
 
 /** Objeto fijo con el que se interactúa: punto de uso, hacia dónde mira y su caja sólida. */
 export interface Fixture {
   anchor: Point2;
+  facing: Point2;
+  box: Box;
+  /** Modelo 3D (client/public/models/<model>.glb), o null para dibujarlo como caja gris. */
+  model: string | null;
+}
+
+/** Mueble o adorno sólido: los enemigos lo rodean. */
+export interface Decor {
+  model: string;
   facing: Point2;
   box: Box;
 }
@@ -226,6 +236,7 @@ function fixture(raw: unknown, where: string): Fixture {
     anchor: nums(o.anchor, 2, `${where}.anchor`) as Point2,
     facing: nums(o.facing, 2, `${where}.facing`) as Point2,
     box: boxOf(o.box, `${where}.box`),
+    model: 'model' in o ? str(o, 'model', where) : null,
   };
 }
 
@@ -307,6 +318,11 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
     })),
     forja: fixture(o.forja, `${w}.forja`),
     contenedorSpots: arr(o, 'contenedorSpots', w).map((x, i) => fixture(x, `${w}.contenedorSpots[${i}]`)),
+    decor: ('decor' in o ? arr(o, 'decor', w) : []).map((x, i) => {
+      const dw = `${w}.decor[${i}]`;
+      const d = obj(x, dw);
+      return { model: str(d, 'model', dw), facing: nums(d.facing, 2, `${dw}.facing`) as Point2, box: boxOf(d.box, `${dw}.box`) };
+    }),
   };
 }
 

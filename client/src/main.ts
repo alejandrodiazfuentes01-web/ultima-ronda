@@ -13,6 +13,7 @@ import { AudioEngine } from './audio/engine';
 import { Hud } from './hud';
 import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
 import { Input } from './input';
+import { loadModels } from './models';
 import { PerfMeter } from './perf';
 import { GameView } from './render';
 
@@ -54,6 +55,12 @@ async function start(): Promise<void> {
   const usingWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
   const perf = new PerfMeter(el('perf'), t(usingWebGPU ? 'renderer.webgpu' : 'renderer.webgl2'));
 
+  // Modelos del mapa: se cargan antes de montar la escena; si alguno falla, sale como caja gris.
+  const m = cfg.map;
+  const modelNames = [m.powerSwitch, ...m.perkStations, m.forja, ...m.contenedorSpots, ...m.decor]
+    .map((f) => f.model)
+    .filter((n): n is string => !!n);
+  await loadModels(modelNames);
   const view = new GameView(cfg.map, cfg.rounds.aliveCap.max);
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -144,7 +151,7 @@ async function start(): Promise<void> {
         g.step(input.next());
         for (const ev of g.events) {
           hud.onEvent(ev);
-          view.onEvent(ev);
+          view.onEvent(ev, g);
           audio.onEvent(ev, g);
           if (ev.type === 'gameOver') {
             el('over-round').textContent = t('over.round', { round: ev.round });
