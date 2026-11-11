@@ -7,7 +7,7 @@ El documento de diseño completo es `docs/GDD.md`. Léelo entero antes de la pri
 ## Cómo trabajamos
 
 - Alejandro dirige y prueba; no programa. Explica cada cambio en español llano y termina siempre con cómo probarlo: qué abrir, qué hacer y qué debería verse.
-- **Fase actual: 1 · Prototipo gris.** La fase 0 se cerró el 2026-11-11: el cubo girando está publicado en https://alejandrodiazfuentes01-web.github.io/ultima-ronda/ y cada `git push` a `main` pasa las pruebas y lo vuelve a publicar. Trabaja solo en la fase actual. Las fases y sus criterios de salida están en la sección «Hoja de ruta de producción» del GDD. No adelantes trabajo de fases posteriores. Cuando se cumpla un criterio de salida, dilo y actualiza esta línea.
+- **Fase actual: 2 · Vertical slice.** La fase 0 se cerró el 2026-11-11 (cubo publicado en https://alejandrodiazfuentes01-web.github.io/ultima-ronda/; cada `git push` a `main` pasa las pruebas y publica). La fase 1 se cerró el 2026-11-11: prototipo gris jugable con buen rendimiento y renderizador decidido; lo que faltaba para que divierta (ambiente y objetivos) es el trabajo de la fase 2. Trabaja solo en la fase actual. Las fases y sus criterios de salida están en la sección «Hoja de ruta de producción» del GDD. No adelantes trabajo de fases posteriores. Cuando se cumpla un criterio de salida, dilo y actualiza esta línea.
 - Nada entra en el juego si no está en el GDD. Las ideas nuevas, tuyas o de Alejandro, se apuntan en `docs/DESPUES.md`.
 - Al final de cada sesión el juego arranca y se puede jugar, aunque tenga menos cosas.
 - Cambios pequeños y un commit por cambio, con mensaje que diga qué cambia para el jugador.
