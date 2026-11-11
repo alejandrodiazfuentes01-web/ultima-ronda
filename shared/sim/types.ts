@@ -103,4 +103,8 @@ export interface SimOptions {
   damageScale?: number;
   /** false para que no aparezcan enemigos solos (pruebas de reglas sueltas). */
   autoRounds?: boolean;
+  /** Ronda en la que empieza la partida (herramienta de prueba). */
+  startRound?: number;
+  /** Puntos con los que empieza, en lugar de los de player.json (herramienta de prueba). */
+  startPoints?: number;
 }

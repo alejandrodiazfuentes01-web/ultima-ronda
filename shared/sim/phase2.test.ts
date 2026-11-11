@@ -447,3 +447,15 @@ describe('power-ups', () => {
     expect(drops).toBe(4);
   });
 });
+
+describe('herramientas de prueba', () => {
+  it('se puede empezar en otra ronda y con otros puntos', () => {
+    const g = newGame({ autoRounds: true, startRound: 8, startPoints: 5000 });
+    expect(g.round.number).toBe(8);
+    expect(g.round.toSpawn).toBe(31);
+    expect(g.player.points).toBe(5000);
+    const e = g.spawnEnemy(0)!;
+    expect(e.health).toBe(850);
+    expect(e.speed).toBe(4);
+  });
+});

@@ -149,7 +149,15 @@ export class Game {
 
   constructor(cfg: GameConfig, options: SimOptions = {}) {
     this.cfg = cfg;
-    this.opts = { seed: 1, invulnerable: false, damageScale: 1, autoRounds: true, ...options };
+    this.opts = {
+      seed: 1,
+      invulnerable: false,
+      damageScale: 1,
+      autoRounds: true,
+      startRound: 1,
+      startPoints: cfg.player.startPoints,
+      ...options,
+    };
     this.rng = new Rng(this.opts.seed);
     const map = cfg.map;
     const pool = cfg.rounds.aliveCap.max;
@@ -172,7 +180,7 @@ export class Game {
       yaw: map.playerStart.yaw,
       pitch: 0,
       health: cfg.player.maxHealth,
-      points: cfg.player.startPoints,
+      points: this.opts.startPoints,
       alive: true,
       slots,
       current: 0,
@@ -212,7 +220,7 @@ export class Game {
     this.contenedor = { spot: 0, phase: 'idle', timer: 0, weapon: null, uses: 0, movesAfter: this.rollMovesAfter() };
 
     this.round = { number: 0, phase: 'waiting', toSpawn: 0, alive: 0, spawnTimer: 0, breakTimer: 0, repairPoints: 0, kills: 0, powerupsDropped: 0 };
-    if (this.opts.autoRounds) this.startRound(1);
+    if (this.opts.autoRounds) this.startRound(Math.max(1, Math.floor(this.opts.startRound)));
   }
 
   // ------------------------------------------------------------------ paso

@@ -16,6 +16,8 @@ import { ENEMY_MODEL } from './enemies';
 import { Input } from './input';
 import { loadModels } from './models';
 import { PerfMeter } from './perf';
+import { PlayStats } from './stats';
+import { summaryText } from './statsView';
 import { Tutorial, type TutorialView } from './tutorial';
 import { GameView } from './render';
 
@@ -47,7 +49,14 @@ async function start(): Promise<void> {
   applyTexts();
 
   const canvas = el<HTMLCanvasElement>('game');
-  const forceWebGL = new URLSearchParams(location.search).get('renderer') === 'webgl';
+  const params = new URLSearchParams(location.search);
+  const forceWebGL = params.get('renderer') === 'webgl';
+  // Herramientas de prueba: ?ronda=8 empieza en esa ronda, &puntos=5000 con esos puntos,
+  // y ?pruebas enseña el resumen de la partida al caer.
+  const testRound = Number(params.get('ronda')) || 1;
+  const testPoints = params.has('puntos') ? Number(params.get('puntos')) : null;
+  const testing = params.has('pruebas');
+  let stats = new PlayStats();
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -122,7 +131,13 @@ async function start(): Promise<void> {
     // El navegador solo deja sonar audio tras un clic: se arranca aquí, al pulsar Jugar.
     audio.start();
     game?.free();
-    game = new Game(cfg, { seed: (Math.random() * 2 ** 31) | 0 });
+    game = new Game(cfg, {
+      seed: (Math.random() * 2 ** 31) | 0,
+      startRound: Math.max(1, Math.floor(testRound)),
+      ...(testPoints !== null && Number.isFinite(testPoints) ? { startPoints: Math.max(0, Math.floor(testPoints)) } : {}),
+    });
+    stats = new PlayStats();
+    el('over-stats').hidden = true;
     // Solo en el servidor de desarrollo: acceso a la partida para pruebas automáticas. No existe en el build publicado.
     if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio });
     input.setView(game.player.yaw, 0);
@@ -135,6 +150,18 @@ async function start(): Promise<void> {
 
   playButton.addEventListener('click', () => void newGame());
   el('again').addEventListener('click', () => void newGame());
+  el('over-stats-copy').addEventListener('click', () => {
+    const button = el('over-stats-copy');
+    void navigator.clipboard
+      .writeText(el('over-stats-text').textContent ?? '')
+      .then(() => {
+        button.textContent = t('stats.copied');
+        setTimeout(() => (button.textContent = t('stats.copy')), 1500);
+      })
+      .catch(() => {
+        // Sin permiso para el portapapeles: el texto se puede seleccionar a mano.
+      });
+  });
   el('resume').addEventListener('click', () => {
     audio.start();
     void capture();
@@ -166,6 +193,7 @@ async function start(): Promise<void> {
       const g = game;
       alpha = stepper.advance(frameSeconds, () => {
         g.step(input.next());
+        stats.onStep(g);
         for (const ev of g.events) {
           hud.onEvent(ev);
           view.onEvent(ev, g);
@@ -173,6 +201,10 @@ async function start(): Promise<void> {
           tutorial.onEvent(ev);
           if (ev.type === 'gameOver') {
             el('over-round').textContent = t('over.round', { round: ev.round });
+            if (testing) {
+              el('over-stats-text').textContent = summaryText(stats.summary());
+              el('over-stats').hidden = false;
+            }
             setState('over');
             input.unlock();
           }
