@@ -1,0 +1,7 @@
+{
+  "game.title": "Última Ronda",
+  "build.phase": "Pre-production · deployment test",
+  "renderer.webgpu": "Renderer: WebGPU",
+  "renderer.webgl2": "Renderer: WebGL 2",
+  "error.noGraphics": "Your browser can't display 3D graphics. Try a recent version of Chrome, Edge, Firefox or Safari."
+}
