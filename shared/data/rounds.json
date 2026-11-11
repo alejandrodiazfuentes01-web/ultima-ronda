@@ -1,0 +1,24 @@
+{
+  "enemyHealth": {
+    "linearBase": 150,
+    "linearPerRound": 100,
+    "linearUntilRound": 9,
+    "exponentialBase": 950,
+    "exponentialFactor": 1.1
+  },
+  "enemyCount": {
+    "quadratic": 0.09,
+    "linear": 2.4,
+    "constant": 6
+  },
+  "spawnInterval": {
+    "initialSeconds": 2,
+    "decayPerRound": 0.95,
+    "minSeconds": 0.1
+  },
+  "aliveCap": {
+    "solo": 24,
+    "perExtraPlayer": 4,
+    "max": 32
+  }
+}
