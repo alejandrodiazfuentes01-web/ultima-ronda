@@ -18,7 +18,7 @@ const COLORS = {
   trim: 0x6d757e,
   door: 0xb5703a,
   locker: 0x2f7f86,
-  plank: 0x9a8a6c,
+  plank: 0x4d5863,
   enemy: 0x4a4f5c,
   enemyHead: 0x5d6270,
 };
@@ -44,8 +44,23 @@ function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
   return out;
 }
 
-/** Alto de cada plancha en metros (aspecto, no balance). */
-const PLANK_HEIGHT = 0.12;
+/** Ancho de cada plancha metálica en metros (aspecto, no balance). */
+const PLANK_WIDTH = 0.15;
+
+/**
+ * Disposición propia de las planchas de una ventana: un marco de cuatro y una
+ * cruzada en diagonal, con el centro despejado para ver quién viene.
+ * El orden es el de reparación; los enemigos las arrancan al revés: primero la
+ * diagonal del centro, luego los laterales y al final las de arriba y abajo.
+ * place = [posición a lo ancho (-1 a 1), altura (0 a 1), giro, capa].
+ */
+const PLANK_LAYOUT: Array<{ place: [number, number, number, number]; length: (w: number, h: number) => number }> = [
+  { place: [0, 0.1, 0.03, 0], length: (w) => w + 0.3 },
+  { place: [0, 0.9, -0.04, 0], length: (w) => w + 0.3 },
+  { place: [-0.74, 0.5, Math.PI / 2 + 0.06, 1], length: (_w, h) => h + 0.25 },
+  { place: [0.74, 0.5, Math.PI / 2 - 0.05, 1], length: (_w, h) => h + 0.25 },
+  { place: [0, 0.5, 0.5, 2], length: (w, h) => Math.hypot(w, h) * 0.92 },
+];
 
 const tmpMatrix = new THREE.Matrix4();
 const tmpPos = new THREE.Vector3();
@@ -117,7 +132,7 @@ export class GameView {
     const plankCount = map.windows.length * map.planksPerWindow;
     this.planks = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: COLORS.plank, roughness: 0.7, metalness: 0.3 }),
+      new THREE.MeshStandardMaterial({ color: COLORS.plank, roughness: 0.55, metalness: 0.5 }),
       plankCount,
     );
     const span = map.windowTop - map.sillHeight;
@@ -125,18 +140,19 @@ export class GameView {
       const [x0, z0, x1, z1] = w.opening;
       const alongX = x1 - x0 > z1 - z0;
       const out = new THREE.Vector2(w.outside[0] - w.inside[0], w.outside[1] - w.inside[1]).normalize();
+      const width = alongX ? x1 - x0 : z1 - z0;
+      const baseYaw = alongX ? 0 : Math.PI / 2;
       for (let i = 0; i < map.planksPerWindow; i++) {
-        const y = map.sillHeight + ((i + 0.5) / map.planksPerWindow) * span;
-        // Ligera inclinación alterna, para que parezcan atornilladas a mano.
-        const tilt = (i % 2 === 0 ? 1 : -1) * 0.04;
-        // En la cara interior del muro, donde el jugador las ve y las repara.
-        const cx = alongX ? (x0 + x1) / 2 : (out.x > 0 ? x0 : x1) - out.x * 0.04;
-        const cz = alongX ? (out.y > 0 ? z0 : z1) - out.y * 0.04 : (z0 + z1) / 2;
-        const len = (alongX ? x1 - x0 : z1 - z0) + 0.3;
-        tmpPos.set(cx, y, cz);
-        tmpQuat.setFromEuler(new THREE.Euler(alongX ? 0 : tilt, alongX ? 0 : Math.PI / 2, alongX ? tilt : 0));
-        // Planchas estrechas con huecos entre ellas: tapan menos de la mitad y dejan ver quién viene.
-        tmpScale.set(len, PLANK_HEIGHT, 0.05);
+        const spec = PLANK_LAYOUT[i % PLANK_LAYOUT.length]!;
+        const [u, v, angle, layer] = spec.place;
+        // En la cara interior del muro, donde el jugador las ve y las repara. Cada capa va un poco más hacia dentro.
+        const depth = 0.04 + layer * 0.03;
+        const along = u * (width / 2);
+        const cx = alongX ? (x0 + x1) / 2 + along : (out.x > 0 ? x0 : x1) - out.x * depth;
+        const cz = alongX ? (out.y > 0 ? z0 : z1) - out.y * depth : (z0 + z1) / 2 - along;
+        tmpPos.set(cx, map.sillHeight + v * span, cz);
+        tmpQuat.setFromEuler(new THREE.Euler(0, baseYaw, angle, 'YXZ'));
+        tmpScale.set(spec.length(width, span), PLANK_WIDTH, 0.03);
         this.plankMatrices.push(new THREE.Matrix4().compose(tmpPos, tmpQuat, tmpScale));
       }
     }
