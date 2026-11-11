@@ -5,6 +5,7 @@
 import rawEconomy from './data/economy.json';
 import rawEnemies from './data/enemies.json';
 import rawMap from './data/maps/prototipo.json';
+import rawMapWide from './data/maps/amplio.json';
 import rawPlayer from './data/player.json';
 import rawWeapons from './data/weapons.json';
 import rawPerks from './data/perks.json';
@@ -212,6 +213,8 @@ export interface MapConfig {
   forja: Fixture;
   contenedorSpots: Fixture[];
   decor: Decor[];
+  /** Zona con arte final (el Laboratorio): [minX, minZ, maxX, maxZ]. */
+  labArea: [number, number, number, number];
 }
 
 /** Objeto fijo con el que se interactúa: punto de uso, hacia dónde mira y su caja sólida. */
@@ -311,6 +314,7 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       yaw: num(ps, 'yaw', `${w}.playerStart`, { min: -Math.PI * 2, max: Math.PI * 2 }),
     },
     navFloors: arr(o, 'navFloors', w).map((r, i) => nums(r, 4, `${w}.navFloors[${i}]`) as [number, number, number, number]),
+    labArea: nums(o.labArea, 4, `${w}.labArea`) as [number, number, number, number],
     powerSwitch: fixture(o.powerSwitch, `${w}.powerSwitch`),
     perkStations: arr(o, 'perkStations', w).map((x, i) => ({
       ...fixture(x, `${w}.perkStations[${i}]`),
@@ -481,12 +485,16 @@ export interface GameConfig {
   powerups: PowerupsConfig;
 }
 
-export function loadConfig(): GameConfig {
+/** Mapas disponibles. «amplio» es una variante de prueba con más espacio libre (?mapa=amplio). */
+export const MAPS = { prototipo: rawMap, amplio: rawMapWide } as const;
+export type MapName = keyof typeof MAPS;
+
+export function loadConfig(mapName: MapName = 'prototipo'): GameConfig {
   const weapons = parseWeapons(rawWeapons);
   const player = parsePlayer(rawPlayer);
   if (!weapons[player.startWeapon]) throw new DataError(`player.json.startWeapon: el arma «${player.startWeapon}» no existe`);
   const perks = parsePerks(rawPerks, weapons);
-  const map = parseMap(rawMap, weapons);
+  const map = parseMap(MAPS[mapName], weapons);
   map.perkStations.forEach((st, i) => {
     if (!perks.perks[st.perk]) throw new DataError(`mapa.perkStations[${i}].perk: el suero «${st.perk}» no existe en perks.json`);
   });

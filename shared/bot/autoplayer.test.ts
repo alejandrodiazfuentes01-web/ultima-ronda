@@ -24,4 +24,11 @@ describe('jugador automático', () => {
     // También ha abierto la puerta, así que han entrado enemigos por el laboratorio.
     expect(report.doorOpened).toBe(true);
   }, 300_000);
+
+  it('el mapa de prueba amplio también se juega 20 rondas sin atascos', () => {
+    const report = runBot(loadConfig('amplio'), { rounds: 20 });
+    expect(report.problems).toEqual([]);
+    expect(report.roundsCompleted).toBe(20);
+    expect(report.doorOpened).toBe(true);
+  }, 300_000);
 });

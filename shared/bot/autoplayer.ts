@@ -13,8 +13,8 @@ import { Game } from '../sim/game';
 import { EYE_HEIGHT } from '../sim/physics';
 import { emptyInput, type PlayerInput } from '../sim/types';
 
-/** Puesto del jugador automático: junto a la puerta, para ver entrar a los del laboratorio. */
-const POST = { x: 9.5, z: 6 };
+/** Puesto del jugador automático: delante de la puerta, para ver entrar a los del laboratorio. */
+const POST_BEFORE_DOOR = 1.7;
 const HEAD_HEIGHT = 1.6;
 
 /** Límites de la vigilancia. */
@@ -44,12 +44,14 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
   let roundStartTick = 0;
   let roundsCompleted = 0;
   let fireToggle = false;
-  game.teleportPlayer(POST.x, POST.z);
+  const [ax, az] = cfg.map.doors[0]!.anchors[0]!;
+  const post = { x: ax - POST_BEFORE_DOOR, z: az };
+  game.teleportPlayer(post.x, post.z);
 
   const maxTicks = Math.round((opts.rounds * (MAX_ROUND_SECONDS + cfg.rounds.breakSeconds)) / SIM_DT);
   try {
     for (let t = 0; t < maxTicks && roundsCompleted < opts.rounds && problems.length === 0; t++) {
-      const input = decide(game, fireToggle);
+      const input = decide(game, fireToggle, post);
       fireToggle = !fireToggle;
       game.step(input);
 
@@ -96,7 +98,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
   }
 }
 
-function decide(game: Game, fireToggle: boolean): PlayerInput {
+function decide(game: Game, fireToggle: boolean, post: { x: number; z: number }): PlayerInput {
   const input = emptyInput();
   const p = game.player;
   input.yaw = p.yaw;
@@ -110,7 +112,7 @@ function decide(game: Game, fireToggle: boolean): PlayerInput {
   if (!smg && p.points >= buy.cost) return useAt(game, buy.anchor, input);
   if (smg && !game.doors[0]!.open && p.points >= door.cost + ammoCost) return useAt(game, door.anchors[0]!, input);
   if (smg && smg.mag + smg.reserve < 30 && p.points >= ammoCost) return useAt(game, buy.anchor, input);
-  if (Math.hypot(p.pos.x - POST.x, p.pos.z - POST.z) > 0.5) game.teleportPlayer(POST.x, POST.z);
+  if (Math.hypot(p.pos.x - post.x, p.pos.z - post.z) > 0.5) game.teleportPlayer(post.x, post.z);
 
   // Arma: el SMG-5 si tiene balas.
   const smgSlot = p.slots.findIndex((s) => s?.weapon === buy.weapon);

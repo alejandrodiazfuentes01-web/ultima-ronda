@@ -99,4 +99,5 @@ Herramientas de prueba en la dirección del juego (el jugador normal no las ve):
 ?ronda=8         empieza la partida en la ronda 8
 &puntos=5000     empieza con esos puntos
 ?pruebas         al caer, enseña el resumen de la partida con un botón para copiarlo
+?mapa=amplio     mapa de prueba con un 50 % más de espacio libre (se regenera con scripts/generar-mapa-amplio.py)
 ```

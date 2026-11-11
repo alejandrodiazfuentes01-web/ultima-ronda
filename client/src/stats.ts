@@ -39,9 +39,6 @@ export interface Summary {
   lastZone: 'vestibulo' | 'laboratorio' | null;
 }
 
-/** Límite entre zonas en x (el mismo que usa el render). */
-const LAB_X = 12;
-
 export class PlayStats {
   private readonly rounds: RoundStat[] = [];
   private readonly purchases: Purchase[] = [];
@@ -111,7 +108,7 @@ export class PlayStats {
         this.hitsTaken++;
         const e = game.enemies[ev.enemy];
         this.lastHitFrom = e ? (e.phase === 'chasing' ? 'dentro' : 'ventana') : null;
-        this.lastZone = game.player.pos.x < LAB_X ? 'vestibulo' : 'laboratorio';
+        this.lastZone = game.player.pos.x < game.cfg.map.labArea[0] ? 'vestibulo' : 'laboratorio';
         break;
       }
       case 'downed':

@@ -15,8 +15,6 @@ import { Props } from './props';
 import { labFloorTexture, labWallTexture } from './textures';
 import { Viewmodel } from './viewmodel';
 
-/** Límite entre el Vestíbulo (gris) y el Laboratorio (con arte), en x. */
-const LAB_X = 12;
 /** Metros que cubre una repetición de las texturas del Laboratorio. */
 const TEXTURE_METERS = 2;
 /** Altura de los ojos al estar caído. */
@@ -71,7 +69,8 @@ function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
 }
 
 /** Parte las cajas que cruzan el límite del Laboratorio: [vestíbulo, laboratorio]. */
-function splitAtLab(boxes: Box[]): [Box[], Box[]] {
+function splitAtLab(boxes: Box[], labX: number): [Box[], Box[]] {
+  const LAB_X = labX;
   const left: Box[] = [];
   const right: Box[] = [];
   for (const b of boxes) {
@@ -136,7 +135,7 @@ export class GameView {
     moon.position.set(-6, 14, -8);
     this.scene.add(moon);
     const hall = new THREE.PointLight(0xffc98a, 14, 14, 1.6);
-    hall.position.set(6, 2.9, 6);
+    hall.position.set(map.playerStart.position[0], 2.9, map.playerStart.position[2] - 1);
     this.scene.add(hall);
 
     // Suelo.
@@ -148,12 +147,15 @@ export class GameView {
       const [x0, z0, x1, z1] = w.opening;
       walls.push([x0, 0, z0, x1, map.sillHeight, z1], [x0, map.windowTop, z0, x1, map.wallHeight, z1]);
     }
-    const [hallWalls, labWalls] = splitAtLab(walls);
+    const [hallWalls, labWalls] = splitAtLab(walls, map.labArea[0]);
     this.scene.add(new THREE.Mesh(boxesGeometry(hallWalls), new THREE.MeshStandardMaterial({ color: COLORS.wall, roughness: 0.9 })));
     this.scene.add(new THREE.Mesh(boxesGeometry(labWalls), new THREE.MeshStandardMaterial({ map: labWallTexture(), roughness: 0.75, metalness: 0.15 })));
     // Suelo de baldosas del Laboratorio, apenas por encima del suelo general.
     this.scene.add(
-      new THREE.Mesh(boxesGeometry([[LAB_X, 0, 0, 24, 0.004, 12]]), new THREE.MeshStandardMaterial({ map: labFloorTexture(), roughness: 0.85 })),
+      new THREE.Mesh(
+        boxesGeometry([[map.labArea[0], 0, map.labArea[1], map.labArea[2], 0.004, map.labArea[3]]]),
+        new THREE.MeshStandardMaterial({ map: labFloorTexture(), roughness: 0.85 }),
+      ),
     );
 
     // Compuertas.

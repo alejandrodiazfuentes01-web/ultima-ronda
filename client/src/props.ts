@@ -100,10 +100,13 @@ export class Props {
     this.forjaDisplay = new WeaponDisplay(scene);
 
     // Luces del Laboratorio: emergencia roja hasta que llega la energía.
-    for (const [x, z] of [
-      [15, 2],
-      [21, 10],
+    const [lx0, lz0, lx1, lz1] = map.labArea;
+    for (const [fx, fz] of [
+      [0.25, 0.17],
+      [0.75, 0.83],
     ] as const) {
+      const x = lx0 + (lx1 - lx0) * fx;
+      const z = lz0 + (lz1 - lz0) * fz;
       const l = new THREE.PointLight(0xff2a1a, 6, 14, 1.6);
       l.position.set(x, 2.9, z);
       this.labLights.push(l);
