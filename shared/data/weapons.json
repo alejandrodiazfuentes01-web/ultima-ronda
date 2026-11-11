@@ -1,0 +1,24 @@
+{
+  "m1911": {
+    "damage": 20,
+    "pellets": 1,
+    "fireMode": "semi",
+    "rpm": 400,
+    "magazine": 8,
+    "reserve": 64,
+    "reloadSeconds": 1.6,
+    "mobility": 1,
+    "recoil": "medium"
+  },
+  "smg5": {
+    "damage": 28,
+    "pellets": 1,
+    "fireMode": "auto",
+    "rpm": 800,
+    "magazine": 30,
+    "reserve": 150,
+    "reloadSeconds": 2.2,
+    "mobility": 1,
+    "recoil": "low"
+  }
+}

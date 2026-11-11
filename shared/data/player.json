@@ -1,0 +1,17 @@
+{
+  "maxHealth": 100,
+  "regenDelaySeconds": 4,
+  "regenPerSecond": 50,
+  "walkSpeed": 4.5,
+  "sprintSpeed": 6.5,
+  "jumpHeight": 0.9,
+  "startPoints": 500,
+  "headMultiplier": 2.5,
+  "limbMultiplier": 1,
+  "useRange": 1.6,
+  "repairSecondsPerPlank": 1,
+  "weaponSwitchSeconds": 0.5,
+  "startWeapon": "m1911",
+  "weaponSlots": 2,
+  "melee": { "damage": 150, "range": 1.8, "cooldownSeconds": 0.8 }
+}

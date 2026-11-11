@@ -1,0 +1,9 @@
+{
+  "hit": 10,
+  "killBody": 60,
+  "killHead": 100,
+  "killMelee": 130,
+  "repairPlank": 10,
+  "repairCapPerRound": 500,
+  "ammoCostFactor": 0.5
+}

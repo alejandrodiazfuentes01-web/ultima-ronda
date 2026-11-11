@@ -15,6 +15,8 @@ export interface RoundsConfig {
   enemyCount: { quadratic: number; linear: number; constant: number };
   spawnInterval: { initialSeconds: number; decayPerRound: number; minSeconds: number };
   aliveCap: { solo: number; perExtraPlayer: number; max: number };
+  /** Pausa entre rondas, en segundos. */
+  breakSeconds: number;
 }
 
 function section(raw: unknown, name: string): Record<string, unknown> {
@@ -61,6 +63,7 @@ export function parseRoundsConfig(raw: unknown): RoundsConfig {
       perExtraPlayer: positive(a, 'aliveCap', 'perExtraPlayer'),
       max: positive(a, 'aliveCap', 'max'),
     },
+    breakSeconds: positive(raw as Record<string, unknown>, 'rounds', 'breakSeconds'),
   };
 }
 

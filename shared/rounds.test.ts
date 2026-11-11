@@ -56,7 +56,7 @@ describe('validación de rounds.json', () => {
   });
 
   it('rechaza un valor que falta o no es un número', () => {
-    const broken = structuredClone(rawRounds) as Record<string, Record<string, unknown>>;
+    const broken = structuredClone(rawRounds) as unknown as Record<string, Record<string, unknown>>;
     delete broken.enemyCount!.linear;
     expect(() => parseRoundsConfig(broken)).toThrow(/enemyCount\.linear/);
     expect(() => parseRoundsConfig({ ...rawRounds, spawnInterval: { ...rawRounds.spawnInterval, minSeconds: 'x' } })).toThrow();

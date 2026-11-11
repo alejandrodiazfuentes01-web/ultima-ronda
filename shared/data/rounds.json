@@ -20,5 +20,6 @@
     "solo": 24,
     "perExtraPlayer": 4,
     "max": 32
-  }
+  },
+  "breakSeconds": 10
 }

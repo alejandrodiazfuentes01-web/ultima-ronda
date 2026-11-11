@@ -149,6 +149,26 @@ Economía de puntos:
 
 El diseño empuja a un dilema conocido: disparar al cuerpo con armas débiles da más puntos por enemigo, pero cuesta más munición y más riesgo.
 
+Valores de partida que el resto del documento no fijaba, aprobados al empezar la fase 1. Se ajustan jugando, como todo lo demás:
+
+| Concepto | Valor |
+| --- | --- |
+| Puntos iniciales | 500 |
+| Munición de reserva | M1911: 8 + 64. SMG-5: 30 + 150 |
+| Recarga | M1911: 1,6 s. SMG-5: 2,2 s |
+| Recompra de munición | Llena cargador y reserva |
+| Cuerpo a cuerpo | 150 de daño, alcance 1,8 m, uno cada 0,8 s |
+| Golpe del enemigo | Uno cada 1,2 s, alcance 1,4 m |
+| Barricadas | 5 planchas por ventana; el enemigo arranca una cada 1,5 s; reparar una cuesta 1 s manteniendo la tecla de usar |
+| Tope de puntos por reparar | 500 por ronda |
+| Extremidades | Daño × 1 |
+| Salto | 0,9 m |
+| Regeneración de vida | 50 por segundo, tras los 4 s sin daño |
+| Cambio de arma | 0,5 s |
+| Cadencia máxima de las semiautomáticas | 400 disparos/min, aunque se pulse más rápido |
+
+Controles: WASD para moverse, ratón para apuntar y disparar, Mayúsculas para esprintar, Espacio para saltar, R para recargar, E para usar y comprar, V para el cuerpo a cuerpo, 1 y 2 o la rueda para cambiar de arma y Escape para la pausa. Nada va en Ctrl.
+
 Arsenal de lanzamiento. Cada arma cubre un papel del arsenal de Black Ops 3 y se asigna al arma real que dispara de forma más parecida:
 
 | Papel en BO3 (referencia) | Arma real | Nombre en el juego | Por qué encaja |
@@ -241,6 +261,8 @@ Reglas de construcción del nivel:
 5. El nivel se prueba primero en cajas grises. No se hace arte hasta que el flujo divierte.
 
 Ritmo esperado de una partida media: energía encendida en las rondas 5–7, primera mejora en La Forja en las rondas 10–12, mapa abierto del todo hacia la 12.
+
+El prototipo gris de la fase 1 usa solo dos zonas: el Vestíbulo, con sus cuatro ventanas, la M1911 inicial y el SMG-5 de pared, y el Laboratorio tras la puerta 1, con dos ventanas y un bloque central que forma un circuito corto. En la fase 1, quedarse sin vida termina la partida; el derribo llega en la fase 2.
 
 ## Arquitectura técnica
 
