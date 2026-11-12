@@ -462,6 +462,14 @@ export class AudioEngine {
       case 'effectEnd':
         this.tune(t, [[NOTE.G5, 0], [NOTE.C5, 0.12]], 'triangle', 0.15);
         break;
+      case 'exhausted':
+        // Respiración agitada: tres jadeos.
+        for (let i = 0; i < 3; i++) this.noiseBurst(this.sfx, t + i * 0.45, { type: 'bandpass', freq: 700, q: 1.5, attack: 0.08, dur: 0.3, gain: 0.25 });
+        break;
+      case 'landed':
+        this.tone(this.sfx, t, { type: 'sine', freq: 90, freqEnd: 50, dur: 0.12, gain: Math.min(0.5, ev.speed * 0.06) });
+        this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 500, dur: 0.08, gain: 0.2 });
+        break;
       case 'gameOver':
         this.setMusic(0, false, 0);
         this.tone(this.sfx, t, { type: 'sawtooth', freq: 220, freqEnd: 40, attack: 0.05, dur: 2.2, gain: 0.2 });

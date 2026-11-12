@@ -22,6 +22,8 @@ export class Viewmodel {
   private kick = 0;
   private flashTime = 0;
   private bobPhase = 0;
+  /** 0 = arma en posición de disparo, 1 = bajada por esprintar. */
+  private sprintPose = 0;
 
   constructor(camera: THREE.Camera) {
     // Todas las armas, normales y mejoradas, se crean al arrancar (regla 5): luego solo se muestran u ocultan.
@@ -75,6 +77,10 @@ export class Viewmodel {
     this.bobPhase += dt * speed * 2.2;
     const bob = Math.min(speed / 6, 1);
 
+    // Esprintando, el arma baja y se ladea; vuelve al dejar de correr.
+    const poseTarget = p.sprinting || p.sprintFireDelay > 0 ? 1 : 0;
+    this.sprintPose += (poseTarget - this.sprintPose) * Math.min(1, dt * 12);
+
     // Recarga y cambio de arma: el arma baja y vuelve.
     let lower = 0;
     if (p.reloadTimer > 0 && cfg && !p.downed) lower = Math.sin(Math.PI * (1 - p.reloadTimer / cfg.reloadSeconds)) * 0.18;
@@ -83,9 +89,9 @@ export class Viewmodel {
 
     this.root.position.set(
       REST.x + Math.sin(this.bobPhase) * 0.012 * bob,
-      REST.y - Math.abs(Math.cos(this.bobPhase)) * 0.01 * bob - lower,
+      REST.y - Math.abs(Math.cos(this.bobPhase)) * 0.01 * bob - lower - this.sprintPose * 0.06,
       REST.z + kickAmount,
     );
-    this.root.rotation.set(kickAmount * 2 + lower * 1.5, 0, 0);
+    this.root.rotation.set(kickAmount * 2 + lower * 1.5 - this.sprintPose * 0.35, this.sprintPose * 0.5, this.sprintPose * 0.25);
   }
 }

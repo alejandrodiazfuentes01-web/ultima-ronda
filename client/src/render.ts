@@ -122,6 +122,10 @@ export class GameView {
   private readonly props: Props;
   private readonly effects: Effects;
   private time = 0;
+  /** Balanceo de cámara al moverse y golpe al aterrizar (aspecto, no balance). */
+  private bobPhase = 0;
+  private bobAmount = 0;
+  private landKick = 0;
 
   constructor(map: MapConfig, poolSize: number) {
     this.scene.background = new THREE.Color(COLORS.sky);
@@ -231,6 +235,7 @@ export class GameView {
   }
 
   onEvent(ev: SimEvent, game: Game): void {
+    if (ev.type === 'landed') this.landKick = Math.min(0.12, ev.speed * 0.018);
     this.viewmodel.onEvent(ev);
     this.enemyViews.onEvent(ev);
     this.effects.onEvent(ev, game);
@@ -242,8 +247,20 @@ export class GameView {
     const lerp = (a: number, b: number) => a + (b - a) * alpha;
     this.time += frameSeconds;
     const eye = p.downed ? DOWNED_EYE : EYE_HEIGHT;
-    this.camera.position.set(lerp(p.prevPos.x, p.pos.x), lerp(p.prevPos.y, p.pos.y) + eye, lerp(p.prevPos.z, p.pos.z));
-    this.camera.rotation.set(pitch, yaw, 0);
+    // Balanceo: sube y baja con los pasos y se inclina un poco a cada lado; más fuerte esprintando.
+    const speed = Math.hypot(p.vel.x, p.vel.z);
+    const target = p.grounded ? Math.min(1, speed / game.cfg.player.sprintSpeed) : 0;
+    this.bobAmount += (target - this.bobAmount) * Math.min(1, frameSeconds * 8);
+    this.bobPhase += frameSeconds * (p.downed ? 3 : 4 + speed * 1.3);
+    const bobY = Math.sin(this.bobPhase * 2) * 0.035 * this.bobAmount;
+    const roll = Math.sin(this.bobPhase) * 0.012 * this.bobAmount;
+    this.landKick = Math.max(0, this.landKick - frameSeconds * 0.5);
+    this.camera.position.set(
+      lerp(p.prevPos.x, p.pos.x),
+      lerp(p.prevPos.y, p.pos.y) + eye + bobY - this.landKick,
+      lerp(p.prevPos.z, p.pos.z),
+    );
+    this.camera.rotation.set(pitch - this.landKick * 0.6, yaw, roll);
 
     this.enemyViews.update(game, alpha, frameSeconds);
 
