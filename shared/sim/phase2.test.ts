@@ -492,7 +492,8 @@ describe('herramientas de prueba', () => {
     expect(g.player.points).toBe(5000);
     const e = g.spawnEnemy(0)!;
     expect(e.health).toBe(850);
-    expect(e.speed).toBe(4);
+    expect(e.speed).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9); // velocidad de la ronda ± la de cada Vacío
+    expect(e.speed).toBeLessThanOrEqual(4 * 1.15 + 1e-9);
   });
 });
 
@@ -532,6 +533,58 @@ describe('la horda', () => {
     }
     run(g, seconds(3), () => ({ yaw: 0, moveZ: 1, sprint: true }));
     expect(g.player.pos.z).toBeGreaterThan(6.3);
+  });
+});
+
+describe('la horda no va en fila', () => {
+  it('al huir en línea recta, rara vez hay más de uno y medio en la misma línea de tiro', () => {
+    let inLine = 0;
+    let samples = 0;
+    for (let seed = 1; seed <= 3; seed++) {
+      const g = newGame({ seed });
+      g.round.number = 5;
+      g.teleportPlayer(6, 9);
+      for (let i = 0; i < 10; i++) g.spawnEnemyInside(3.6 + (i % 5) * 0.9, 11 - Math.floor(i / 5) * 0.9);
+      for (let t = 0; t < seconds(16); t++) {
+        const goingEast = Math.floor(t / seconds(4)) % 2 === 0;
+        run(g, 1, () => ({ yaw: goingEast ? -Math.PI / 2 : Math.PI / 2, moveZ: 0.7 }));
+        if (t > seconds(4) && t % 15 === 0) {
+          const p = g.player.pos;
+          const es = g.enemies.filter((e) => e.phase === 'chasing');
+          let near = es[0]!;
+          let best = Infinity;
+          for (const e of es) {
+            const d = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
+            if (d < best) {
+              best = d;
+              near = e;
+            }
+          }
+          const ux = (near.pos.x - p.x) / best;
+          const uz = (near.pos.z - p.z) / best;
+          for (const e of es) {
+            const rx = e.pos.x - p.x;
+            const rz = e.pos.z - p.z;
+            if (rx * ux + rz * uz > 0 && Math.abs(rx * uz - rz * ux) < 0.3) inLine++;
+          }
+          samples++;
+        }
+      }
+      g.free();
+      games.splice(games.indexOf(g), 1);
+    }
+    expect(inLine / samples).toBeLessThan(1.8);
+  });
+
+  it('cada Vacío tiene su propia velocidad, cerca de la de la ronda', () => {
+    const g = newGame();
+    g.round.number = 5;
+    const speeds = Array.from({ length: 12 }, () => g.spawnEnemy(0)!.speed);
+    expect(new Set(speeds.map((v) => v.toFixed(3))).size).toBeGreaterThan(6);
+    for (const v of speeds) {
+      expect(v).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9);
+      expect(v).toBeLessThanOrEqual(4 * 1.15 + 1e-9);
+    }
   });
 });
 

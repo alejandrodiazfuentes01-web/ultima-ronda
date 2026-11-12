@@ -119,7 +119,18 @@ export interface EnemiesConfig {
   climbSeconds: number;
   speedTiers: Array<{ fromRound: number; speed: number }>;
   /** Cómo se agrupa la horda: cuánto se apartan entre sí y a qué distancia se tienen en cuenta. */
-  horde: { separationWeight: number; collisionQueryRange: number };
+  horde: {
+    separationWeight: number;
+    collisionQueryRange: number;
+    /** Cada Vacío va hasta un ±x % más rápido o más lento que la velocidad de la ronda. */
+    speedVariation: number;
+    /** Cuánto se adelanta, como mucho, a donde va a estar el jugador (cortar el paso). */
+    leadSecondsMax: number;
+    /** Cuánto se balancea a los lados al perseguir, como mucho. */
+    swayMeters: number;
+    /** Por debajo de esta distancia va directo al jugador. */
+    directWithin: number;
+  };
 }
 
 export function parseEnemies(raw: unknown): EnemiesConfig {
@@ -143,10 +154,18 @@ export function parseEnemies(raw: unknown): EnemiesConfig {
     plankTearSeconds: num(o, 'plankTearSeconds', w),
     climbSeconds: num(o, 'climbSeconds', w),
     speedTiers: tiers,
-    horde: {
-      separationWeight: num(obj(o.horde, `${w}.horde`), 'separationWeight', `${w}.horde`, { allowZero: true }),
-      collisionQueryRange: num(obj(o.horde, `${w}.horde`), 'collisionQueryRange', `${w}.horde`),
-    },
+    horde: (() => {
+      const hw = `${w}.horde`;
+      const h = obj(o.horde, hw);
+      return {
+        separationWeight: num(h, 'separationWeight', hw, { allowZero: true }),
+        collisionQueryRange: num(h, 'collisionQueryRange', hw),
+        speedVariation: num(h, 'speedVariation', hw, { allowZero: true, max: 0.9 }),
+        leadSecondsMax: num(h, 'leadSecondsMax', hw, { allowZero: true }),
+        swayMeters: num(h, 'swayMeters', hw, { allowZero: true }),
+        directWithin: num(h, 'directWithin', hw, { allowZero: true }),
+      };
+    })(),
   };
 }
 

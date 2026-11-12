@@ -42,6 +42,11 @@ export interface EnemyState {
   speed: number;
   agent: CrowdAgent | null;
   spawnTick: number;
+  /** Personalidad, fijada al aparecer: anticipación, balanceo lateral y su ritmo. */
+  lead: number;
+  sway: number;
+  swayFreq: number;
+  swayPhase: number;
 }
 
 export interface WeaponSlot {
@@ -227,6 +232,10 @@ export class Game {
         speed: 0,
         agent: null,
         spawnTick: 0,
+        lead: 0,
+        sway: 0,
+        swayFreq: 0,
+        swayPhase: 0,
       });
     }
     for (let i = 0; i < PICKUP_POOL; i++) this.pickups.push({ active: false, kind: 'municionCompleta', x: 0, z: 0, timer: 0 });
@@ -1052,7 +1061,13 @@ export class Game {
     e.phase = 'approaching';
     e.window = wi;
     e.health = enemyHealth(round, this.cfg.rounds);
-    e.speed = enemySpeed(round, this.cfg.enemies);
+    // Cada Vacío es un poco distinto: así la horda no avanza en bloque ni en fila.
+    const hd = this.cfg.enemies.horde;
+    e.speed = enemySpeed(round, this.cfg.enemies) * (1 + (this.rng.next() * 2 - 1) * hd.speedVariation);
+    e.lead = this.rng.next() * hd.leadSecondsMax;
+    e.sway = this.rng.next() * hd.swayMeters;
+    e.swayFreq = 0.3 + this.rng.next() * 0.5;
+    e.swayPhase = this.rng.next() * Math.PI * 2;
     e.pos = { x: w.spawn[0], y: 0, z: w.spawn[1] };
     e.prevPos = { ...e.pos };
     e.timer = 0;
@@ -1239,6 +1254,21 @@ export class Game {
     const dx = e.pos.x - p.x;
     const dz = e.pos.z - p.z;
     const d = Math.hypot(dx, dz);
+    const hd = this.cfg.enemies.horde;
+    if (d > hd.directWithin) {
+      // Lejos: cada uno a su manera. Unos van a donde el jugador va a estar (cortan el paso)
+      // y todos se balancean a los lados con su propio ritmo, así que no siguen el mismo rastro.
+      const v = this.player.vel;
+      const t = this.tick * SIM_DT;
+      const side = Math.sin(t * e.swayFreq * Math.PI * 2 + e.swayPhase) * e.sway;
+      const px = -dz / d;
+      const pz = dx / d;
+      const tx = p.x + v.x * e.lead + px * side;
+      const tz = p.z + v.z * e.lead + pz * side;
+      e.agent.requestMoveTarget(this.nav.closest({ x: tx, y: 0, z: tz }));
+      return;
+    }
+    // Cerca: directo a por el jugador, parándose al tocarlo.
     const off = d > 0.01 ? CONTACT_DISTANCE / d : 0;
     e.agent.requestMoveTarget(this.nav.closest({ x: p.x + dx * off, y: 0, z: p.z + dz * off }));
   }
