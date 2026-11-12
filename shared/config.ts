@@ -33,6 +33,12 @@ export interface PlayerConfig {
   startWeapon: string;
   weaponSlots: number;
   melee: { damage: number; range: number; cooldownSeconds: number };
+  /** Metros por segundo al cuadrado para ganar y perder velocidad (inercia). */
+  acceleration: number;
+  deceleration: number;
+  /** Velocidad al arrastrarse estando caído. */
+  crawlSpeed: number;
+  sprint: { maxSeconds: number; recoverSeconds: number; recoverDelaySeconds: number; minToStart: number; fireDelaySeconds: number };
 }
 
 export function parsePlayer(raw: unknown): PlayerConfig {
@@ -54,6 +60,20 @@ export function parsePlayer(raw: unknown): PlayerConfig {
     weaponSwitchSeconds: num(o, 'weaponSwitchSeconds', w, { allowZero: true }),
     startWeapon: str(o, 'startWeapon', w),
     weaponSlots: num(o, 'weaponSlots', w, { int: true, min: 1 }),
+    acceleration: num(o, 'acceleration', w),
+    deceleration: num(o, 'deceleration', w),
+    crawlSpeed: num(o, 'crawlSpeed', w, { allowZero: true }),
+    sprint: (() => {
+      const sw = `${w}.sprint`;
+      const x = obj(o.sprint, sw);
+      return {
+        maxSeconds: num(x, 'maxSeconds', sw),
+        recoverSeconds: num(x, 'recoverSeconds', sw),
+        recoverDelaySeconds: num(x, 'recoverDelaySeconds', sw, { allowZero: true }),
+        minToStart: num(x, 'minToStart', sw, { allowZero: true, max: 1 }),
+        fireDelaySeconds: num(x, 'fireDelaySeconds', sw, { allowZero: true }),
+      };
+    })(),
     melee: {
       damage: num(m, 'damage', `${w}.melee`),
       range: num(m, 'range', `${w}.melee`),

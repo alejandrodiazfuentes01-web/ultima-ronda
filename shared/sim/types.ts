@@ -77,6 +77,8 @@ export type SimEvent =
   | { type: 'powerupPickup'; kind: string }
   | { type: 'powerupExpired'; slot: number }
   | { type: 'effectEnd'; kind: string }
+  | { type: 'exhausted' }
+  | { type: 'landed'; speed: number }
   | { type: 'gameOver'; round: number };
 
 export type Prompt =

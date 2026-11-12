@@ -209,6 +209,20 @@ describe('derribo con Segundo aliento', () => {
     expect(count(later, 'playerHit')).toBeGreaterThan(0);
   });
 
+  it('caído te puedes arrastrar despacio (1 m/s), sin esprintar ni saltar', () => {
+    const g = newGame();
+    g.player.perks.push('segundoAliento');
+    g.player.downed = true;
+    g.player.downTimer = 10;
+    g.teleportPlayer(6, 8);
+    run(g, seconds(0.5), () => ({ moveZ: 1, yaw: 0 }));
+    const z0 = g.player.pos.z;
+    run(g, seconds(2), () => ({ moveZ: 1, sprint: true, jump: true, yaw: 0 }));
+    expect(z0 - g.player.pos.z).toBeCloseTo(2, 1);
+    expect(g.player.sprinting).toBe(false);
+    expect(g.player.pos.y).toBeLessThan(0.05);
+  });
+
   it('sin Segundo aliento, caer termina la partida', () => {
     const g = newGame({ invulnerable: false });
     beaten(g);

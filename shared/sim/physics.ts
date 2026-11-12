@@ -31,6 +31,10 @@ const G_RAY = groups(RAY, WORLD | ENEMY);
 export const PLAYER_RADIUS = 0.35;
 export const PLAYER_HEIGHT = 1.8;
 export const EYE_HEIGHT = 1.65;
+/** Margen que el controlador de personaje deja con el suelo y las paredes. La cápsula se coloca ya con él. */
+const KCC_OFFSET = 0.02;
+/** Altura del centro de la cápsula sobre los pies. */
+const CAPSULE_CENTER = PLAYER_HEIGHT / 2 + KCC_OFFSET;
 
 /** Partes de impacto del enemigo: altura del centro, forma y tamaño. */
 const ENEMY_PARTS: Array<{ part: HitPart; y: number; halfHeight: number; radius: number }> = [
@@ -91,13 +95,13 @@ export class Physics {
 
     // Jugador: cápsula movida por el controlador de personaje.
     this.playerBody = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerStart.x, playerStart.y + PLAYER_HEIGHT / 2, playerStart.z),
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(playerStart.x, playerStart.y + CAPSULE_CENTER, playerStart.z),
     );
     this.playerCollider = this.world.createCollider(
       RAPIER.ColliderDesc.capsule(PLAYER_HEIGHT / 2 - PLAYER_RADIUS, PLAYER_RADIUS).setCollisionGroups(G_PLAYER),
       this.playerBody,
     );
-    this.controller = this.world.createCharacterController(0.02);
+    this.controller = this.world.createCharacterController(KCC_OFFSET);
     this.controller.enableSnapToGround(0.3);
     this.controller.setApplyImpulsesToDynamicBodies(false);
 
@@ -123,14 +127,14 @@ export class Physics {
     const m = this.controller.computedMovement();
     this.grounded = this.controller.computedGrounded();
     const next = { x: feet.x + m.x, y: feet.y + m.y, z: feet.z + m.z };
-    this.playerBody.setNextKinematicTranslation({ x: next.x, y: next.y + PLAYER_HEIGHT / 2, z: next.z });
+    this.playerBody.setNextKinematicTranslation({ x: next.x, y: next.y + CAPSULE_CENTER, z: next.z });
     return next;
   }
 
   /** Coloca al jugador sin comprobar choques (pruebas y reaparición). */
   teleportPlayer(feet: Vec3): void {
-    this.playerBody.setTranslation({ x: feet.x, y: feet.y + PLAYER_HEIGHT / 2, z: feet.z }, true);
-    this.playerBody.setNextKinematicTranslation({ x: feet.x, y: feet.y + PLAYER_HEIGHT / 2, z: feet.z });
+    this.playerBody.setTranslation({ x: feet.x, y: feet.y + CAPSULE_CENTER, z: feet.z }, true);
+    this.playerBody.setNextKinematicTranslation({ x: feet.x, y: feet.y + CAPSULE_CENTER, z: feet.z });
   }
 
   isGrounded(): boolean {

@@ -71,6 +71,13 @@ export interface PlayerState {
   repairTimer: number;
   grounded: boolean;
   sprinting: boolean;
+  /** Velocidad horizontal actual (con inercia). */
+  vel: { x: number; z: number };
+  /** Aguante para esprintar, de 0 a 1. */
+  stamina: number;
+  sinceSprint: number;
+  /** Tiempo que falta para poder disparar tras esprintar. */
+  sprintFireDelay: number;
   /** Sueros activos, por orden de compra. */
   perks: string[];
   /** Caído y levantándose solo (Segundo aliento). */
@@ -194,6 +201,10 @@ export class Game {
       repairTimer: 0,
       grounded: true,
       sprinting: false,
+      vel: { x: 0, z: 0 },
+      stamina: 1,
+      sinceSprint: 999,
+      sprintFireDelay: 0,
       perks: [],
       downed: false,
       downTimer: 0,
@@ -320,22 +331,54 @@ export class Game {
     const maxHealth = this.maxHealth();
     if (!p.downed && p.sinceDamage >= cp.regenDelaySeconds) p.health = Math.min(maxHealth, p.health + cp.regenPerSecond * SIM_DT);
 
-    // Movimiento. Caído, no se mueve.
+    // Movimiento. Caído, se arrastra despacio.
     const slot = this.activeSlot();
     const mobility = slot ? this.weapon(slot.weapon).mobility : 1;
-    let mx = p.downed ? 0 : input.moveX;
-    let mz = p.downed ? 0 : input.moveZ;
+    let mx = input.moveX;
+    let mz = input.moveZ;
     const len = Math.hypot(mx, mz);
     if (len > 1) {
       mx /= len;
       mz /= len;
     }
-    p.sprinting = !p.downed && input.sprint && mz > 0.1;
-    const speed = (p.sprinting ? cp.sprintSpeed : cp.walkSpeed) * mobility;
+
+    // Sprint con aguante: se gasta esprintando y se recupera tras un momento sin esprintar.
+    const sc = cp.sprint;
+    const wantsSprint = !p.downed && input.sprint && mz > 0.1;
+    const wasSprinting = p.sprinting;
+    p.sprinting = wantsSprint && (wasSprinting ? p.stamina > 0 : p.stamina >= sc.minToStart);
+    if (p.sprinting) {
+      p.stamina = Math.max(0, p.stamina - SIM_DT / sc.maxSeconds);
+      p.sinceSprint = 0;
+      if (p.stamina === 0) this.events.push({ type: 'exhausted' });
+    } else {
+      p.sinceSprint += SIM_DT;
+      if (p.sinceSprint >= sc.recoverDelaySeconds) p.stamina = Math.min(1, p.stamina + SIM_DT / sc.recoverSeconds);
+    }
+    if (wasSprinting && !p.sprinting) p.sprintFireDelay = sc.fireDelaySeconds;
+    p.sprintFireDelay = Math.max(0, p.sprintFireDelay - SIM_DT);
+
+    const speed = p.downed ? cp.crawlSpeed : (p.sprinting ? cp.sprintSpeed : cp.walkSpeed) * mobility;
     const sin = Math.sin(p.yaw);
     const cos = Math.cos(p.yaw);
-    let vx = (cos * mx - sin * mz) * speed;
-    let vz = (-sin * mx - cos * mz) * speed;
+    const tx = (cos * mx - sin * mz) * speed;
+    const tz = (-sin * mx - cos * mz) * speed;
+
+    // Inercia: la velocidad se acerca a la deseada sin saltos.
+    const dvx = tx - p.vel.x;
+    const dvz = tz - p.vel.z;
+    const dv = Math.hypot(dvx, dvz);
+    const accelerating = Math.hypot(tx, tz) >= Math.hypot(p.vel.x, p.vel.z);
+    const maxDv = (accelerating ? cp.acceleration : cp.deceleration) * SIM_DT;
+    if (dv > maxDv) {
+      p.vel.x += (dvx / dv) * maxDv;
+      p.vel.z += (dvz / dv) * maxDv;
+    } else {
+      p.vel.x = tx;
+      p.vel.z = tz;
+    }
+    let vx = p.vel.x;
+    let vz = p.vel.z;
 
     // Los enemigos son sólidos: no se puede atravesar la horda. Si el jugador va hacia
     // un Vacío que toca, ese movimiento se anula; si se ha metido dentro, sale hacia fuera.
@@ -353,6 +396,12 @@ export class Game {
           vx -= into * nx;
           vz -= into * nz;
         }
+        // La velocidad guardada tampoco empuja contra el Vacío.
+        const intoKept = p.vel.x * nx + p.vel.z * nz;
+        if (intoKept < 0) {
+          p.vel.x -= intoKept * nx;
+          p.vel.z -= intoKept * nz;
+        }
         if (pass === 0 && d < CONTACT_DISTANCE) {
           const push = (CONTACT_DISTANCE - d) / SIM_DT;
           vx += nx * push;
@@ -362,12 +411,17 @@ export class Game {
     }
 
     if (!p.downed && p.grounded && input.jump && !this.prev.jump) p.vy = Math.sqrt(2 * GRAVITY * cp.jumpHeight);
-    p.vy -= GRAVITY * SIM_DT;
+    // Apoyado en el suelo no se empuja contra él (el controlador ya lo mantiene pegado);
+    // la gravedad actúa en el aire.
+    if (!p.grounded || p.vy > 0) p.vy -= GRAVITY * SIM_DT;
     const next = this.physics.movePlayer(p.pos, { x: vx * SIM_DT, y: p.vy * SIM_DT, z: vz * SIM_DT });
     p.pos.x = next.x;
     p.pos.y = next.y;
     p.pos.z = next.z;
+    const wasGrounded = p.grounded;
+    const fallSpeed = -p.vy;
     p.grounded = this.physics.isGrounded();
+    if (p.grounded && !wasGrounded && fallSpeed > 2) this.events.push({ type: 'landed', speed: fallSpeed });
     if (p.grounded && p.vy < 0) p.vy = 0;
 
     this.updateWeapons(input);
@@ -385,6 +439,8 @@ export class Game {
     p.pos = { x, y: 0, z };
     p.prevPos = { x, y: 0, z };
     p.vy = 0;
+    p.vel.x = 0;
+    p.vel.z = 0;
     this.physics.teleportPlayer(p.pos);
     this.physics.step();
   }
@@ -444,7 +500,8 @@ export class Game {
     if (input.reload && !this.prev.reload) this.startReload(slot, w);
 
     const wantsFire = w.fireMode === 'auto' ? input.fire : pressed;
-    if (!wantsFire || p.switchTimer > 0 || p.reloadTimer > 0 || p.fireCooldown > 0) return;
+    // Esprintando el arma va bajada: no se dispara hasta un instante después de parar.
+    if (!wantsFire || p.switchTimer > 0 || p.reloadTimer > 0 || p.fireCooldown > 0 || p.sprinting || p.sprintFireDelay > 0) return;
     if (slot.mag <= 0) {
       if (slot.reserve > 0) this.startReload(slot, w);
       else if (pressed) this.events.push({ type: 'dryFire', weapon: w.id });

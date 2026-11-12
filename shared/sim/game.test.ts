@@ -316,14 +316,57 @@ describe('vida del jugador', () => {
 });
 
 describe('movimiento', () => {
-  it('anda a 4,5 m/s y esprinta a 6,5 m/s', () => {
+  it('anda a 4,5 m/s y esprinta a 6,5 m/s (velocidad punta, tras arrancar)', () => {
+    const g = newGame();
+    g.teleportPlayer(1, 6);
+    run(g, seconds(0.5), () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
+    const x0 = g.player.pos.x;
+    run(g, seconds(1), () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
+    expect(g.player.pos.x - x0).toBeCloseTo(4.5, 1);
+    g.teleportPlayer(1, 3);
+    run(g, seconds(0.5), () => ({ yaw: -Math.PI / 2, moveZ: 1, sprint: true }));
+    const x1 = g.player.pos.x;
+    run(g, seconds(1), () => ({ yaw: -Math.PI / 2, moveZ: 1, sprint: true }));
+    expect(g.player.pos.x - x1).toBeCloseTo(6.5, 1);
+  });
+
+  it('inercia: tarda unas décimas en arrancar y en frenar, no lo hace de golpe', () => {
     const g = newGame();
     g.teleportPlayer(2, 6);
-    run(g, seconds(1), () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
-    expect(g.player.pos.x - 2).toBeCloseTo(4.5, 0);
-    g.teleportPlayer(1, 3);
-    run(g, seconds(1), () => ({ yaw: -Math.PI / 2, moveZ: 1, sprint: true }));
-    expect(g.player.pos.x - 1).toBeCloseTo(6.5, 0);
+    run(g, 1, () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
+    expect(Math.hypot(g.player.vel.x, g.player.vel.z)).toBeLessThan(1);
+    run(g, seconds(0.3), () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
+    expect(Math.hypot(g.player.vel.x, g.player.vel.z)).toBeCloseTo(4.5, 1);
+    run(g, 1);
+    expect(Math.hypot(g.player.vel.x, g.player.vel.z)).toBeGreaterThan(3);
+    run(g, seconds(0.3));
+    expect(Math.hypot(g.player.vel.x, g.player.vel.z)).toBe(0);
+  });
+
+  it('el sprint dura 4 s, se agota y se recupera descansando', () => {
+    const g = newGame();
+    g.teleportPlayer(6, 11);
+    const ev = run(g, seconds(4.2), () => ({ moveZ: 1, sprint: true, yaw: 0 }));
+    expect(ev).toContainEqual({ type: 'exhausted' });
+    expect(g.player.stamina).toBe(0);
+    expect(g.player.sprinting).toBe(false);
+    // Recién agotado no deja volver a esprintar.
+    run(g, seconds(0.5), () => ({ moveZ: 1, sprint: true, yaw: 0 }));
+    expect(g.player.sprinting).toBe(false);
+    // Descansando 0,8 s + 3 s se recupera del todo.
+    run(g, seconds(4));
+    expect(g.player.stamina).toBe(1);
+  });
+
+  it('esprintando no se dispara, y tras parar hay un instante de espera', () => {
+    const g = newGame();
+    g.teleportPlayer(6, 11);
+    let ev = run(g, seconds(0.5), (i) => ({ moveZ: 1, sprint: true, yaw: Math.PI, fire: i % 2 === 0 }));
+    expect(ev.some((e) => e.type === 'shot')).toBe(false);
+    ev = run(g, seconds(0.15), (i) => ({ fire: i % 2 === 0, yaw: Math.PI }));
+    expect(ev.some((e) => e.type === 'shot')).toBe(false);
+    ev = run(g, seconds(0.3), (i) => ({ fire: i % 2 === 0, yaw: Math.PI }));
+    expect(ev.some((e) => e.type === 'shot')).toBe(true);
   });
 
   it('las ventanas no dejan salir al jugador', () => {

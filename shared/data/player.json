@@ -13,5 +13,19 @@
   "weaponSwitchSeconds": 0.5,
   "startWeapon": "m1911",
   "weaponSlots": 2,
-  "melee": { "damage": 150, "range": 1.8, "cooldownSeconds": 0.8 }
+  "melee": {
+    "damage": 150,
+    "range": 1.8,
+    "cooldownSeconds": 0.8
+  },
+  "acceleration": 30,
+  "deceleration": 40,
+  "crawlSpeed": 1,
+  "sprint": {
+    "maxSeconds": 4,
+    "recoverSeconds": 3,
+    "recoverDelaySeconds": 0.8,
+    "minToStart": 0.25,
+    "fireDelaySeconds": 0.25
+  }
 }

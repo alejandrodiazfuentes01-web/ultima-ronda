@@ -182,6 +182,9 @@ Valores de partida añadidos al empezar la fase 2:
 | M249 | Reserva 300, recarga 5,5 s |
 | SVD | Reserva 50, recarga 3 s, atraviesa hasta 3 enemigos, 150 disparos/min como máximo |
 | Arco voltaico | 500 de daño a cada uno de hasta 5 enemigos, saltando a menos de 4 m entre ellos. Reserva 60, recarga 2,5 s |
+| Movimiento | Inercia: se acelera a 30 m/s² y se frena a 40 m/s² (unas décimas para arrancar y parar) |
+| Sprint | Dura 4 s seguidos; se recupera en 3 s tras 0,8 s sin esprintar; hace falta un 25 % para volver a empezar. Esprintando no se dispara, y tras parar hay 0,25 s de espera |
+| Caído | Se puede arrastrar a 1 m/s, sin esprintar ni saltar, disparando con la M1911 |
 | Horda | Los Vacíos van hombro con hombro (separación 0,2 y rango 0,8 en la multitud) y son sólidos: el jugador no puede pasar entre dos que estén juntos. Ajustado el 2026-11-12 tras la primera prueba |
 
 En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
