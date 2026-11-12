@@ -98,6 +98,8 @@ export interface EnemiesConfig {
   plankTearSeconds: number;
   climbSeconds: number;
   speedTiers: Array<{ fromRound: number; speed: number }>;
+  /** Cómo se agrupa la horda: cuánto se apartan entre sí y a qué distancia se tienen en cuenta. */
+  horde: { separationWeight: number; collisionQueryRange: number };
 }
 
 export function parseEnemies(raw: unknown): EnemiesConfig {
@@ -121,6 +123,10 @@ export function parseEnemies(raw: unknown): EnemiesConfig {
     plankTearSeconds: num(o, 'plankTearSeconds', w),
     climbSeconds: num(o, 'climbSeconds', w),
     speedTiers: tiers,
+    horde: {
+      separationWeight: num(obj(o.horde, `${w}.horde`), 'separationWeight', `${w}.horde`, { allowZero: true }),
+      collisionQueryRange: num(obj(o.horde, `${w}.horde`), 'collisionQueryRange', `${w}.horde`),
+    },
   };
 }
 

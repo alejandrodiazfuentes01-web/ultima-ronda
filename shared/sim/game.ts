@@ -333,16 +333,27 @@ export class Game {
     let vx = (cos * mx - sin * mz) * speed;
     let vz = (-sin * mx - cos * mz) * speed;
 
-    // Los enemigos empujan: no se puede atravesar la horda.
-    for (const e of this.enemies) {
-      if (e.phase !== 'chasing') continue;
-      const dx = p.pos.x - e.pos.x;
-      const dz = p.pos.z - e.pos.z;
-      const d = Math.hypot(dx, dz);
-      if (d > 0.001 && d < CONTACT_DISTANCE) {
-        const push = (CONTACT_DISTANCE - d) / SIM_DT;
-        vx += (dx / d) * push;
-        vz += (dz / d) * push;
+    // Los enemigos son sólidos: no se puede atravesar la horda. Si el jugador va hacia
+    // un Vacío que toca, ese movimiento se anula; si se ha metido dentro, sale hacia fuera.
+    for (let pass = 0; pass < 2; pass++) {
+      for (const e of this.enemies) {
+        if (e.phase !== 'chasing') continue;
+        const dx = p.pos.x - e.pos.x;
+        const dz = p.pos.z - e.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 0.001 || d >= CONTACT_DISTANCE + 0.05) continue;
+        const nx = dx / d;
+        const nz = dz / d;
+        const into = vx * nx + vz * nz;
+        if (into < 0) {
+          vx -= into * nx;
+          vz -= into * nz;
+        }
+        if (pass === 0 && d < CONTACT_DISTANCE) {
+          const push = (CONTACT_DISTANCE - d) / SIM_DT;
+          vx += nx * push;
+          vz += nz * push;
+        }
       }
     }
 
@@ -997,7 +1008,7 @@ export class Game {
     e.pos = { x, y: 0, z };
     e.prevPos = { ...e.pos };
     e.phase = 'chasing';
-    e.agent = this.nav.addAgent(e.pos, e.speed);
+    e.agent = this.nav.addAgent(e.pos, e.speed, this.cfg.enemies.horde);
     this.physics.setEnemy(e.index, true, e.pos);
     return e;
   }
@@ -1095,7 +1106,7 @@ export class Game {
         if (e.timer <= 0) {
           e.pos.y = 0;
           e.phase = 'chasing';
-          e.agent = this.nav.addAgent(e.pos, e.speed);
+          e.agent = this.nav.addAgent(e.pos, e.speed, this.cfg.enemies.horde);
           this.retarget(e);
           this.events.push({ type: 'enemyEntered', enemy: e.index });
         }

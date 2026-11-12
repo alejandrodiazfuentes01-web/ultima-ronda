@@ -5,8 +5,21 @@
   "plankTearSeconds": 1.5,
   "climbSeconds": 1,
   "speedTiers": [
-    { "fromRound": 1, "speed": 1.5 },
-    { "fromRound": 4, "speed": 4 },
-    { "fromRound": 12, "speed": 6 }
-  ]
+    {
+      "fromRound": 1,
+      "speed": 1.5
+    },
+    {
+      "fromRound": 4,
+      "speed": 4
+    },
+    {
+      "fromRound": 12,
+      "speed": 6
+    }
+  ],
+  "horde": {
+    "separationWeight": 0.2,
+    "collisionQueryRange": 0.8
+  }
 }

@@ -57,15 +57,15 @@ export class Navigation {
     return r.success ? r.point : p;
   }
 
-  addAgent(p: Vec3, speed: number): CrowdAgent {
+  addAgent(p: Vec3, speed: number, horde: { separationWeight: number; collisionQueryRange: number }): CrowdAgent {
     return this.crowd.addAgent(this.closest(p), {
       radius: AGENT_RADIUS,
       height: AGENT_HEIGHT,
       maxSpeed: speed,
       maxAcceleration: 30,
-      collisionQueryRange: 2.5,
+      collisionQueryRange: horde.collisionQueryRange,
       pathOptimizationRange: 10,
-      separationWeight: 2,
+      separationWeight: horde.separationWeight,
     });
   }
 

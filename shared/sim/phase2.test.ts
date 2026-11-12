@@ -459,3 +459,43 @@ describe('herramientas de prueba', () => {
     expect(e.speed).toBe(4);
   });
 });
+
+describe('la horda', () => {
+  it('se agrupa hombro con hombro: menos de 0,8 m de media hasta el vecino más cercano', () => {
+    const g = newGame();
+    g.round.number = 6;
+    g.teleportPlayer(6, 6);
+    for (let i = 0; i < 10; i++) g.spawnEnemyInside(2 + (i % 5) * 1.5, 2 + Math.floor(i / 5) * 1.5);
+    let sum = 0;
+    let n = 0;
+    for (let t = 0; t < seconds(12); t++) {
+      run(g, 1, () => ({ yaw: 0, moveZ: t > seconds(6) ? -0.4 : 0 }));
+      if (t > seconds(5) && t % 30 === 0) {
+        const es = g.enemies.filter((e) => e.phase === 'chasing');
+        for (const a of es) {
+          let best = Infinity;
+          for (const b of es) if (a !== b) best = Math.min(best, Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z));
+          sum += best;
+          n++;
+        }
+      }
+    }
+    expect(sum / n).toBeLessThan(0.8);
+  });
+
+  it('no se puede pasar entre dos Vacíos que están juntos', () => {
+    const g = newGame();
+    g.teleportPlayer(6, 8);
+    // Dos Vacíos uno junto a otro, cerrando el paso hacia el norte.
+    const a = g.spawnEnemyInside(5.62, 6)!;
+    const b = g.spawnEnemyInside(6.38, 6)!;
+    // Que no se muevan: se les quita el agente de navegación (solo cuenta su cuerpo).
+    for (const e of [a, b]) {
+      g.nav.removeAgent(e.agent!);
+      e.agent = null;
+    }
+    run(g, seconds(3), () => ({ yaw: 0, moveZ: 1, sprint: true }));
+    expect(g.player.pos.z).toBeGreaterThan(6.3);
+  });
+});
+
