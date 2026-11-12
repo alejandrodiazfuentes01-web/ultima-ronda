@@ -185,7 +185,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Movimiento | Inercia: se acelera a 30 m/s² y se frena a 40 m/s² (unas décimas para arrancar y parar) |
 | Sprint | Dura 4 s seguidos; se recupera en 3 s tras 0,8 s sin esprintar; hace falta un 25 % para volver a empezar. Esprintando no se dispara, y tras parar hay 0,25 s de espera |
 | Caído | Se puede arrastrar a 1 m/s, sin esprintar ni saltar, disparando con la M1911 |
-| Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío tiene su propia velocidad (±15 % sobre la de la ronda), se adelanta hasta 1 s a donde va el jugador para cortarle el paso y se balancea hasta 2 m a los lados; a menos de 1,5 m va directo. Ajustado el 2026-11-12 tras las primeras pruebas |
+| Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío va hasta un 15 % más lento que la velocidad de la ronda (nunca más rápido) y se balancea hasta 1 m a los lados con su propio ritmo; a menos de 1,5 m va directo. Aceleración 8 m/s²: se mueven con peso, sin lanzarse ni empujarse a tirones. Ajustado el 2026-11-12 tras las primeras pruebas |
 
 En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
 

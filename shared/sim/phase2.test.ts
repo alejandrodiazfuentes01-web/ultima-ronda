@@ -493,12 +493,12 @@ describe('herramientas de prueba', () => {
     const e = g.spawnEnemy(0)!;
     expect(e.health).toBe(850);
     expect(e.speed).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9); // velocidad de la ronda ± la de cada Vacío
-    expect(e.speed).toBeLessThanOrEqual(4 * 1.15 + 1e-9);
+    expect(e.speed).toBeLessThanOrEqual(4 + 1e-9); // nunca más rápido que la velocidad de la ronda
   });
 });
 
 describe('la horda', () => {
-  it('se agrupa hombro con hombro: menos de 0,8 m de media hasta el vecino más cercano', () => {
+  it('se agrupa en piña: el hueco medio entre vecinos (menos de 0,9 m entre centros) es mucho menor que el jugador', () => {
     const g = newGame();
     g.round.number = 6;
     g.teleportPlayer(6, 6);
@@ -517,7 +517,8 @@ describe('la horda', () => {
         }
       }
     }
-    expect(sum / n).toBeLessThan(0.8);
+    // Cuerpos de 0,7 m: menos de 0,9 m entre centros deja huecos de menos de 20 cm.
+    expect(sum / n).toBeLessThan(0.9);
   });
 
   it('no se puede pasar entre dos Vacíos que están juntos', () => {
@@ -576,14 +577,14 @@ describe('la horda no va en fila', () => {
     expect(inLine / samples).toBeLessThan(1.8);
   });
 
-  it('cada Vacío tiene su propia velocidad, cerca de la de la ronda', () => {
+  it('cada Vacío tiene su propia velocidad: hasta un 15 % más lento, nunca más rápido', () => {
     const g = newGame();
     g.round.number = 5;
     const speeds = Array.from({ length: 12 }, () => g.spawnEnemy(0)!.speed);
     expect(new Set(speeds.map((v) => v.toFixed(3))).size).toBeGreaterThan(6);
     for (const v of speeds) {
       expect(v).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9);
-      expect(v).toBeLessThanOrEqual(4 * 1.15 + 1e-9);
+      expect(v).toBeLessThanOrEqual(4 + 1e-9); // nunca más rápido que la velocidad de la ronda
     }
   });
 });

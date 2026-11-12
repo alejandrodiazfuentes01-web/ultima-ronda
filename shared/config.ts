@@ -122,7 +122,7 @@ export interface EnemiesConfig {
   horde: {
     separationWeight: number;
     collisionQueryRange: number;
-    /** Cada Vacío va hasta un ±x % más rápido o más lento que la velocidad de la ronda. */
+    /** Cada Vacío va hasta un x % más lento que la velocidad de la ronda (nunca más rápido). */
     speedVariation: number;
     /** Cuánto se adelanta, como mucho, a donde va a estar el jugador (cortar el paso). */
     leadSecondsMax: number;
@@ -130,6 +130,8 @@ export interface EnemiesConfig {
     swayMeters: number;
     /** Por debajo de esta distancia va directo al jugador. */
     directWithin: number;
+    /** Lo rápido que cambia de velocidad y dirección (m/s²): bajo = se mueve con peso, sin lanzarse. */
+    maxAcceleration: number;
   };
 }
 
@@ -164,6 +166,7 @@ export function parseEnemies(raw: unknown): EnemiesConfig {
         leadSecondsMax: num(h, 'leadSecondsMax', hw, { allowZero: true }),
         swayMeters: num(h, 'swayMeters', hw, { allowZero: true }),
         directWithin: num(h, 'directWithin', hw, { allowZero: true }),
+        maxAcceleration: num(h, 'maxAcceleration', hw),
       };
     })(),
   };

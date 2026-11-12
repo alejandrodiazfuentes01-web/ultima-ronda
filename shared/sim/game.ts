@@ -1063,7 +1063,7 @@ export class Game {
     e.health = enemyHealth(round, this.cfg.rounds);
     // Cada Vacío es un poco distinto: así la horda no avanza en bloque ni en fila.
     const hd = this.cfg.enemies.horde;
-    e.speed = enemySpeed(round, this.cfg.enemies) * (1 + (this.rng.next() * 2 - 1) * hd.speedVariation);
+    e.speed = enemySpeed(round, this.cfg.enemies) * (1 - this.rng.next() * hd.speedVariation);
     e.lead = this.rng.next() * hd.leadSecondsMax;
     e.sway = this.rng.next() * hd.swayMeters;
     e.swayFreq = 0.3 + this.rng.next() * 0.5;
