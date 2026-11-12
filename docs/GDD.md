@@ -172,7 +172,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Concepto | Valor |
 | --- | --- |
 | Energía | Interruptor gratuito. Activa Coraza y La Forja |
-| Segundo aliento | En solitario funciona sin energía. Al caer, te levantas solo a los 5 s, sin recibir daño mientras tanto y con la M1911 en la mano. Pierdes todos los sueros, él incluido. Tres veces por partida; después su estación se apaga |
+| Segundo aliento | En solitario funciona sin energía. Al caer, te levantas solo a los 5 s, sin recibir daño mientras tanto y con la M1911 en la mano. Pierdes todos los sueros, él incluido. Tres veces por partida; después su estación se apaga. Mientras estás caído, los Vacíos se alejan hacia la ventana más lejana, y al levantarte tienes 3 s sin recibir daño |
 | Caer sin Segundo aliento | Fin de la partida en solitario. El desangrado de 45 s queda para el cooperativo |
 | Coraza | Necesita energía. Vida máxima × 2 |
 | El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, Mk 17, M249, SVD y Arco voltaico |

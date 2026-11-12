@@ -352,6 +352,8 @@ export interface PerksConfig {
   maxPerks: number;
   perks: Record<string, PerkConfig>;
   bleedOutSeconds: number;
+  /** Segundos sin recibir daño justo después de levantarse. */
+  reviveProtectionSeconds: number;
   downedWeapon: string;
 }
 
@@ -375,6 +377,7 @@ export function parsePerks(raw: unknown, weapons: Record<string, WeaponConfig>):
     maxPerks: num(o, 'maxPerks', w, { int: true, min: 1 }),
     perks,
     bleedOutSeconds: num(o, 'bleedOutSeconds', w),
+    reviveProtectionSeconds: num(o, 'reviveProtectionSeconds', w, { allowZero: true }),
     downedWeapon: str(o, 'downedWeapon', w, Object.keys(weapons)),
   };
 }

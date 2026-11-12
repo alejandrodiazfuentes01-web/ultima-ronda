@@ -14,5 +14,6 @@
     }
   },
   "bleedOutSeconds": 45,
-  "downedWeapon": "m1911"
+  "downedWeapon": "m1911",
+  "reviveProtectionSeconds": 3
 }

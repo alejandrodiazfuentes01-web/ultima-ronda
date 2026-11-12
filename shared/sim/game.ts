@@ -79,6 +79,8 @@ export interface PlayerState {
   selfRevivesUsed: number;
   /** Arma que se usa mientras está caído. */
   downedSlot: WeaponSlot | null;
+  /** Segundos de protección que quedan tras levantarse. */
+  protectTimer: number;
 }
 
 export interface WindowState {
@@ -197,6 +199,7 @@ export class Game {
       downTimer: 0,
       selfRevivesUsed: 0,
       downedSlot: null,
+      protectTimer: 0,
     };
 
     for (let i = 0; i < pool; i++) {
@@ -306,6 +309,7 @@ export class Game {
     p.yaw = input.yaw;
     p.pitch = Math.max(-1.5, Math.min(1.5, input.pitch));
 
+    p.protectTimer = Math.max(0, p.protectTimer - SIM_DT);
     if (p.downed) {
       p.downTimer -= SIM_DT;
       if (p.downTimer <= 0) this.revive();
@@ -714,6 +718,7 @@ export class Game {
     p.switchTimer = 0;
     p.downedSlot = this.freshSlot(this.cfg.perks.downedWeapon);
     this.events.push({ type: 'downed', revivesLeft: perk.selfRevivesPerGame - p.selfRevivesUsed });
+    for (const e of this.enemies) if (e.phase === 'chasing') this.retarget(e);
   }
 
   private revive(): void {
@@ -724,12 +729,13 @@ export class Game {
     p.reloadTimer = 0;
     p.health = this.maxHealth();
     p.sinceDamage = 0;
+    p.protectTimer = this.cfg.perks.reviveProtectionSeconds;
     this.events.push({ type: 'revived' });
   }
 
   private hurtPlayer(enemy: number): void {
     const p = this.player;
-    if (!p.alive || p.downed || this.opts.invulnerable) return;
+    if (!p.alive || p.downed || p.protectTimer > 0 || this.opts.invulnerable) return;
     p.health = Math.max(0, p.health - this.cfg.enemies.hitDamage);
     p.sinceDamage = 0;
     this.events.push({ type: 'playerHit', health: p.health, enemy });
@@ -1156,6 +1162,23 @@ export class Game {
   private retarget(e: EnemyState): void {
     if (!e.agent) return;
     const p = this.player.pos;
+    if (this.player.downed) {
+      // Con el jugador caído, los Vacíos se alejan: van a la ventana abierta más lejana a él,
+      // para que al levantarse no esté rodeado.
+      let far: [number, number] | null = null;
+      let farD = -1;
+      this.cfg.map.windows.forEach((w, i) => {
+        if (!this.windows[i]!.active) return;
+        const d = Math.hypot(w.inside[0] - p.x, w.inside[1] - p.z);
+        if (d > farD) {
+          farD = d;
+          far = w.inside;
+        }
+      });
+      const t = far as [number, number] | null;
+      if (t) e.agent.requestMoveTarget(this.nav.closest({ x: t[0], y: 0, z: t[1] }));
+      return;
+    }
     const dx = e.pos.x - p.x;
     const dz = e.pos.z - p.z;
     const d = Math.hypot(dx, dz);

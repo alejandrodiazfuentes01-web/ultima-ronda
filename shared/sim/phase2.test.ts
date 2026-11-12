@@ -187,6 +187,28 @@ describe('derribo con Segundo aliento', () => {
     expect(g.player.health).toBe(100);
   });
 
+  it('mientras estás caído los Vacíos se alejan, y al levantarte tienes 3 s de protección', () => {
+    const g = newGame({ invulnerable: false });
+    g.round.number = 4; // ya corren
+    g.player.perks.push('segundoAliento');
+    g.teleportPlayer(6, 7);
+    const near = [g.spawnEnemyInside(6, 6.2)!, g.spawnEnemyInside(5.2, 7)!, g.spawnEnemyInside(6.8, 7)!];
+    for (let i = 0; i < seconds(10) && !g.player.downed; i++) run(g, 1);
+    expect(g.player.downed).toBe(true);
+    for (let i = 0; i < seconds(6) && g.player.downed; i++) run(g, 1);
+    expect(g.player.downed).toBe(false);
+    // Al levantarse, ninguno está encima.
+    for (const e of near) expect(Math.hypot(e.pos.x - 6, e.pos.z - 7)).toBeGreaterThan(3);
+    // Y aunque vuelvan corriendo, durante la protección no hacen daño.
+    g.spawnEnemyInside(6, 6.2);
+    const ev = run(g, seconds(2.5));
+    expect(count(ev, 'playerHit')).toBe(0);
+    expect(g.player.alive).toBe(true);
+    // Pasada la protección, vuelven a golpear.
+    const later = run(g, seconds(3));
+    expect(count(later, 'playerHit')).toBeGreaterThan(0);
+  });
+
   it('sin Segundo aliento, caer termina la partida', () => {
     const g = newGame({ invulnerable: false });
     beaten(g);
