@@ -66,6 +66,10 @@ export class Hud {
   private readonly status = el('hud-status');
   private readonly prompt = el('hud-prompt');
   private readonly hitmarker = el('hud-hitmarker');
+  private readonly crosshair = el('hud-crosshair');
+  private readonly scope = el('hud-scope');
+  private lastGap = -1;
+  private lastCrossOpacity = -1;
   private readonly damage = el('hud-damage');
   private readonly banner = el('hud-banner');
   private readonly hint = el('hud-hint');
@@ -137,6 +141,27 @@ export class Hud {
       default:
         break;
     }
+  }
+
+  /**
+   * Punto de mira: sus marcas se separan con la dispersión real del arma, y se
+   * desvanece al apuntar. Con la mira telescópica pegada al ojo se ve la retícula.
+   */
+  setAim(game: Game, fovDegrees: number, screenHeight: number, aim: number, scoped: boolean): void {
+    const spread = (game.spreadDegrees() * Math.PI) / 180;
+    const gap = Math.round(4 + (Math.tan(spread) / Math.tan((fovDegrees * Math.PI) / 360)) * (screenHeight / 2));
+    if (gap !== this.lastGap) {
+      this.crosshair.style.setProperty('--gap', `${gap}px`);
+      this.lastGap = gap;
+    }
+    const p = game.player;
+    const hide = p.sprinting || p.sprintFireDelay > 0 || !game.activeSlot();
+    const opacity = hide ? 0 : Math.round(Math.max(0, 1 - aim * 2.5) * 20) / 20;
+    if (opacity !== this.lastCrossOpacity) {
+      this.crosshair.style.opacity = String(opacity);
+      this.lastCrossOpacity = opacity;
+    }
+    if (this.scope.hidden === scoped) this.scope.hidden = !scoped;
   }
 
   /** Aviso del tutorial, o null para ocultarlo. */

@@ -135,6 +135,8 @@ function decide(game: Game, fireToggle: boolean, post: { x: number; z: number })
   const dz = e.pos.z - p.pos.z;
   input.yaw = Math.atan2(-dx, -dz);
   input.pitch = Math.atan2(e.pos.y + HEAD_HEIGHT - (p.pos.y + EYE_HEIGHT), Math.hypot(dx, dz));
+  // Con la mira subida, para que la dispersión de cadera no le haga fallar a distancia.
+  input.aim = true;
 
   const slot = p.slots[p.current];
   const cfgW = slot ? game.cfg.weapons[slot.weapon] : undefined;

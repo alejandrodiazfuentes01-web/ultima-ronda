@@ -175,7 +175,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Segundo aliento | En solitario funciona sin energía. Al caer, te levantas solo a los 5 s, sin recibir daño mientras tanto y con la M1911 en la mano. Pierdes todos los sueros, él incluido. Tres veces por partida; después su estación se apaga. Mientras estás caído, los Vacíos se alejan hacia la ventana más lejana, y al levantarte tienes 3 s sin recibir daño |
 | Caer sin Segundo aliento | Fin de la partida en solitario. El desangrado de 45 s queda para el cooperativo |
 | Coraza | Necesita energía. Vida máxima × 2 |
-| El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, Mk 17, M249, SVD y Arco voltaico |
+| El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, AK-74, M16, Mk 17, M249, SVD y Arco voltaico. El AK-74 y el M16 están ahí de forma provisional, hasta que existan el Almacén y el Patio con sus taquillas |
 | La Forja | Daño × 2, cargador y reserva × 1,5 y munición llena. Efecto: cada baja con el arma mejorada suelta una onda de ceniza que quita a los enemigos a menos de 3 m la mitad de la vida de la ronda. Tarda 5 s; el arma se recoge en la máquina. Mientras solo haya un efecto, no se puede repetir la mejora |
 | Power-ups | 2 % por baja, máximo 4 por ronda. Se recogen a menos de 1,3 m. Duran 30 s en el suelo y parpadean los últimos 5. Baja instantánea y Puntos dobles duran 30 s. Onda expansiva elimina a todos los enemigos vivos y da 400 puntos, sin puntos por cada baja |
 | Mk 17 | Reserva 120, recarga 2,6 s |
@@ -189,7 +189,21 @@ Valores de partida añadidos al empezar la fase 2:
 
 En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
 
-Controles: WASD para moverse, ratón para apuntar y disparar, Mayúsculas para esprintar, Espacio para saltar, R para recargar, E para usar y comprar, V para el cuerpo a cuerpo, 1 y 2 o la rueda para cambiar de arma y Escape para la pausa. Nada va en Ctrl.
+Manejo de las armas, añadido el 2026-11-17 a petición de Alejandro para acercar la sensación de disparo a la del género. Con él llegan antes de tiempo las cuatro armas de pared que faltaban (M870 y SMG-5 en el Vestíbulo, V-45 en el Laboratorio; AK-74 y M16 en El Contenedor hasta que existan sus zonas). Los valores viven en `weapons.json` y `handling.json`:
+
+| Concepto | Valor |
+| --- | --- |
+| Apuntar con la mira | Clic derecho, mantenido. La mira sube en 0,2–0,4 s según el arma y baja una vez y media más rápido. No sube corriendo, recargando ni cambiando de arma. Apuntando se anda al 60 % y no se esprinta |
+| Zoom al apuntar | La vista se cierra según el arma: casi nada con pistola y subfusiles, algo más con fusiles y mucho con el SVD, que usa mira telescópica. La sensibilidad del ratón baja en la misma proporción |
+| Dispersión | Desde la cadera, cada arma tiene su cono (1–5°); apuntando casi se cierra (0–0,5°). Moverse suma hasta 1,2° y estar en el aire 3°. Disparar seguido abre el cono de cadera un 20 % por disparo, hasta el doble, y se cierra en menos de un segundo. El punto de mira se abre con la dispersión real |
+| Retroceso | Cada disparo sube la vista según el nivel del arma (0,5° las de retroceso bajo, 3,5° el SVD) y la desvía un poco a un lado; apuntando, un 30 % menos. La vista vuelve sola poco a poco, y bajar el ratón lo compensa. Como mucho sube 8° acumulados |
+| M870 | 8 perdigones de 30 de daño con 3,2° de apertura extra. Se recarga cartucho a cartucho (0,55 s cada uno); disparar corta la recarga. Reserva 36 |
+| V-45 | Reserva 180, recarga 2 s |
+| AK-74 | Reserva 180, recarga 2,5 s |
+| M16 | Ráfagas de 3 por pulsación, a 900 disparos/min dentro de la ráfaga y 0,22 s entre ráfagas. Reserva 150, recarga 2,4 s |
+| Disparos | Cada bala deja una trazadora breve, chispas y un agujero en la pared, o un soplo de ceniza si da a un Vacío. El fogonazo ilumina la sala un instante |
+
+Controles: WASD para moverse, ratón para apuntar y disparar, clic derecho para apuntar con la mira, Mayúsculas para esprintar, Espacio para saltar, R para recargar, E para usar y comprar, V para el cuerpo a cuerpo, 1 y 2 o la rueda para cambiar de arma y Escape para la pausa. Nada va en Ctrl.
 
 Arsenal de lanzamiento. Cada arma cubre un papel del arsenal de Black Ops 3 y se asigna al arma real que dispara de forma más parecida:
 
@@ -371,7 +385,7 @@ La dirección artística es estilizada y de pocos polígonos, con mucha niebla y
 
 - **Escenario:** kit modular de unas 40 piezas (suelos, muros, puertas, ventanas, mobiliario) con una sola textura de paleta compartida. Menos materiales significa menos llamadas de dibujo.
 - **Enemigos:** un modelo base con tres variantes de ropa y color. Ocho animaciones: andar, correr, esprintar, atacar, recibir impacto, trepar ventana, caer y deshacerse.
-- **Armas en primera persona:** lo más caro de animar. Para el lanzamiento, arma sin brazos visibles y animada por código: balanceo, retroceso, recarga y cambio. Los brazos animados a mano quedan para después.
+- **Armas en primera persona:** lo más caro de animar. Para el lanzamiento, arma con manos sencillas con guante, animada por código: balanceo, retroceso, recarga (el cargador sale y entra con la mano izquierda), corredera, bombeo de la escopeta y cambio. Los brazos animados a mano quedan para después.
 - **Muerte del enemigo:** se deshace en ceniza con un efecto de partículas y desaparece. Sin sangre, sin desmembramientos y sin cadáveres.
 - **Iluminación:** luz precalculada en el escenario y pocas luces dinámicas (fogonazo, linterna, power-ups). Las sombras en tiempo real son un lujo que se activa solo en calidad alta.
 

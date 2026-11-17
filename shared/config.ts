@@ -12,6 +12,7 @@ import rawPerks from './data/perks.json';
 import rawContenedor from './data/contenedor.json';
 import rawForja from './data/forja.json';
 import rawPowerups from './data/powerups.json';
+import rawHandling from './data/handling.json';
 import { DataError, arr, bool, num, nums, obj, str, type Obj } from './data/validate';
 import { ROUNDS, type RoundsConfig } from './rounds';
 
@@ -174,20 +175,37 @@ export function parseEnemies(raw: unknown): EnemiesConfig {
 
 // ---------- Armas ----------
 
-export const FIRE_MODES = ['semi', 'auto'] as const;
+export const FIRE_MODES = ['semi', 'auto', 'burst'] as const;
+export const RELOAD_MODES = ['magazine', 'shell'] as const;
+export const SIGHTS = ['iron', 'scope'] as const;
 export const RECOIL_LEVELS = ['none', 'low', 'medium', 'high', 'veryHigh'] as const;
 
 export interface WeaponConfig {
   id: string;
   damage: number;
   pellets: number;
+  /** Apertura extra de los perdigones, en grados (0 en armas de una bala). */
+  pelletSpread: number;
   fireMode: (typeof FIRE_MODES)[number];
+  /** Disparos por pulsación en modo ráfaga y pausa entre ráfagas. */
+  burstCount: number;
+  burstDelaySeconds: number;
   rpm: number;
   magazine: number;
   reserve: number;
+  /** Segundos de la recarga entera, o de cada cartucho si se recarga uno a uno. */
   reloadSeconds: number;
+  reloadMode: (typeof RELOAD_MODES)[number];
   mobility: number;
   recoil: (typeof RECOIL_LEVELS)[number];
+  /** Dispersión en grados: desde la cadera y apuntando con la mira. */
+  hipSpread: number;
+  aimSpread: number;
+  /** Segundos que tarda en subir la mira. */
+  aimSeconds: number;
+  /** Cuánto se cierra el campo de visión al apuntar (1 = nada). */
+  aimZoom: number;
+  sight: (typeof SIGHTS)[number];
   /** Cuántos enemigos atraviesa cada bala (1 = ninguno). */
   penetration: number;
   /** Daño en cadena: a cuántos enemigos llega y a qué distancia salta. */
@@ -205,14 +223,23 @@ export function parseWeapons(raw: unknown): Record<string, WeaponConfig> {
       id,
       damage: num(x, 'damage', ww),
       pellets: num(x, 'pellets', ww, { int: true, min: 1 }),
+      pelletSpread: num(x, 'pelletSpread', ww, { allowZero: true, max: 30 }),
       fireMode: str(x, 'fireMode', ww, FIRE_MODES) as WeaponConfig['fireMode'],
+      burstCount: num(x, 'burstCount', ww, { int: true, min: 1 }),
+      burstDelaySeconds: num(x, 'burstDelaySeconds', ww, { allowZero: true }),
       rpm: num(x, 'rpm', ww),
       magazine: num(x, 'magazine', ww, { int: true, min: 1 }),
       reserve: num(x, 'reserve', ww, { int: true, allowZero: true }),
       reloadSeconds: num(x, 'reloadSeconds', ww),
+      reloadMode: str(x, 'reloadMode', ww, RELOAD_MODES) as WeaponConfig['reloadMode'],
       mobility: num(x, 'mobility', ww, { max: 1.5 }),
       recoil: str(x, 'recoil', ww, RECOIL_LEVELS) as WeaponConfig['recoil'],
-      penetration: 'penetration' in x ? num(x, 'penetration', ww, { int: true, min: 1 }) : 1,
+      penetration: num(x, 'penetration', ww, { int: true, min: 1 }),
+      hipSpread: num(x, 'hipSpread', ww, { allowZero: true, max: 30 }),
+      aimSpread: num(x, 'aimSpread', ww, { allowZero: true, max: 30 }),
+      aimSeconds: num(x, 'aimSeconds', ww),
+      aimZoom: num(x, 'aimZoom', ww, { max: 1 }),
+      sight: str(x, 'sight', ww, SIGHTS) as WeaponConfig['sight'],
       chain:
         'chain' in x
           ? {
@@ -223,6 +250,54 @@ export function parseWeapons(raw: unknown): Record<string, WeaponConfig> {
     };
   }
   return out;
+}
+
+// ---------- Manejo de las armas ----------
+
+/** Lo que tienen en común todas las armas al apuntar, dispersarse y dar retroceso. */
+export interface HandlingConfig {
+  /** Velocidad al moverse con la mira subida, como fracción de la normal. */
+  aimMoveFactor: number;
+  /** La mira baja este número de veces más rápido de lo que sube. */
+  aimExitFactor: number;
+  /** Grados extra desde la cadera al andar a velocidad normal, y en el aire. */
+  moveSpread: number;
+  airSpread: number;
+  /** Cada disparo abre la dispersión de cadera esta fracción, hasta un tope; se cierra sola. */
+  bloomPerShot: number;
+  bloomMax: number;
+  bloomRecoverSeconds: number;
+  /** Retroceso de la vista: fracción al apuntar, lo rápido que se recupera y tope en grados. */
+  recoilAimFactor: number;
+  recoilRecoverPerSecond: number;
+  recoilMaxDegrees: number;
+  /** Grados que sube y se desvía la vista en cada disparo, por nivel de retroceso. */
+  recoil: Record<(typeof RECOIL_LEVELS)[number], { pitch: number; yaw: number }>;
+}
+
+export function parseHandling(raw: unknown): HandlingConfig {
+  const w = 'handling.json';
+  const o = obj(raw, w);
+  const levels = obj(o.recoil, `${w}.recoil`);
+  const recoil = {} as HandlingConfig['recoil'];
+  for (const level of RECOIL_LEVELS) {
+    const lw = `${w}.recoil.${level}`;
+    const l = obj(levels[level], lw);
+    recoil[level] = { pitch: num(l, 'pitch', lw, { allowZero: true, max: 20 }), yaw: num(l, 'yaw', lw, { allowZero: true, max: 20 }) };
+  }
+  return {
+    aimMoveFactor: num(o, 'aimMoveFactor', w, { max: 1 }),
+    aimExitFactor: num(o, 'aimExitFactor', w),
+    moveSpread: num(o, 'moveSpread', w, { allowZero: true }),
+    airSpread: num(o, 'airSpread', w, { allowZero: true }),
+    bloomPerShot: num(o, 'bloomPerShot', w, { allowZero: true }),
+    bloomMax: num(o, 'bloomMax', w, { allowZero: true }),
+    bloomRecoverSeconds: num(o, 'bloomRecoverSeconds', w),
+    recoilAimFactor: num(o, 'recoilAimFactor', w, { allowZero: true, max: 1 }),
+    recoilRecoverPerSecond: num(o, 'recoilRecoverPerSecond', w),
+    recoilMaxDegrees: num(o, 'recoilMaxDegrees', w),
+    recoil,
+  };
 }
 
 // ---------- Mapa ----------
@@ -529,6 +604,7 @@ export interface GameConfig {
   economy: EconomyConfig;
   enemies: EnemiesConfig;
   weapons: Record<string, WeaponConfig>;
+  handling: HandlingConfig;
   map: MapConfig;
   perks: PerksConfig;
   contenedor: ContenedorConfig;
@@ -556,6 +632,7 @@ export function loadConfig(mapName: MapName = 'prototipo'): GameConfig {
     economy: parseEconomy(rawEconomy),
     enemies: parseEnemies(rawEnemies),
     weapons,
+    handling: parseHandling(rawHandling),
     map,
     perks,
     contenedor: parseContenedor(rawContenedor, weapons),

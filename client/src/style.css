@@ -54,16 +54,73 @@ body {
   white-space: nowrap;
 }
 
+/* Punto de mira de cuatro marcas: se abren con la dispersión del arma (--gap) y desaparecen al apuntar. */
 #hud-crosshair {
+  --gap: 8px;
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 4px;
-  height: 4px;
-  margin: -2px 0 0 -2px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
+  width: 0;
+  height: 0;
+  transition: opacity 0.08s;
+}
+
+#hud-crosshair i {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 0 2px #000;
+}
+
+#hud-crosshair .t,
+#hud-crosshair .b {
+  left: -1px;
+  width: 2px;
+  height: 9px;
+}
+
+#hud-crosshair .l,
+#hud-crosshair .r {
+  top: -1px;
+  width: 9px;
+  height: 2px;
+}
+
+#hud-crosshair .t {
+  bottom: var(--gap);
+}
+
+#hud-crosshair .b {
+  top: var(--gap);
+}
+
+#hud-crosshair .l {
+  right: var(--gap);
+}
+
+#hud-crosshair .r {
+  left: var(--gap);
+}
+
+/* Mira telescópica: todo negro salvo un círculo, con su retícula. */
+#hud-scope {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)) center / 100% 1px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)) center / 1px 100% no-repeat,
+    radial-gradient(circle at center, transparent 0, transparent 40vh, rgba(0, 0, 0, 0.55) 41vh, #000 42vh);
+}
+
+#hud-scope::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #d33;
 }
 
 #hud-hitmarker {

@@ -83,6 +83,12 @@ export interface PlayerState {
   sinceSprint: number;
   /** Tiempo que falta para poder disparar tras esprintar. */
   sprintFireDelay: number;
+  /** Mira subida, de 0 (cadera) a 1 (apuntando del todo). */
+  aim: number;
+  /** Dispersión acumulada por disparar seguido, de 0 al tope de handling.json. */
+  bloom: number;
+  /** Disparos que quedan de la ráfaga en curso. */
+  burstLeft: number;
   /** Sueros activos, por orden de compra. */
   perks: string[];
   /** Caído y levantándose solo (Segundo aliento). */
@@ -157,6 +163,8 @@ export class Game {
   tick = 0;
 
   private readonly rng: Rng;
+  /** Azar de la dispersión, aparte del de la partida: disparar no cambia qué power-up cae ni dónde. */
+  private readonly spreadRng: Rng;
   private readonly opts: Required<SimOptions>;
   private readonly openZones = new Set<string>();
   private prev = { fire: false, jump: false, use: false, melee: false, reload: false };
@@ -170,9 +178,11 @@ export class Game {
       autoRounds: true,
       startRound: 1,
       startPoints: cfg.player.startPoints,
+      noSpread: false,
       ...options,
     };
     this.rng = new Rng(this.opts.seed);
+    this.spreadRng = new Rng(this.opts.seed ^ 0x5bd1e995);
     const map = cfg.map;
     const pool = cfg.rounds.aliveCap.max;
     const [sx, sy, sz] = map.playerStart.position;
@@ -210,6 +220,9 @@ export class Game {
       stamina: 1,
       sinceSprint: 999,
       sprintFireDelay: 0,
+      aim: 0,
+      bloom: 0,
+      burstLeft: 0,
       perks: [],
       downed: false,
       downTimer: 0,
@@ -353,7 +366,8 @@ export class Game {
 
     // Sprint con aguante: se gasta esprintando y se recupera tras un momento sin esprintar.
     const sc = cp.sprint;
-    const wantsSprint = !p.downed && input.sprint && mz > 0.1;
+    // Apuntar manda sobre esprintar: con la mira pulsada no se corre.
+    const wantsSprint = !p.downed && input.sprint && !input.aim && mz > 0.1;
     const wasSprinting = p.sprinting;
     p.sprinting = wantsSprint && (wasSprinting ? p.stamina > 0 : p.stamina >= sc.minToStart);
     if (p.sprinting) {
@@ -367,7 +381,15 @@ export class Game {
     if (wasSprinting && !p.sprinting) p.sprintFireDelay = sc.fireDelaySeconds;
     p.sprintFireDelay = Math.max(0, p.sprintFireDelay - SIM_DT);
 
-    const speed = p.downed ? cp.crawlSpeed : (p.sprinting ? cp.sprintSpeed : cp.walkSpeed) * mobility;
+    // Mira: sube mientras se mantiene pulsada y baja más rápido. No sube corriendo, recargando ni cambiando de arma.
+    const hc = this.cfg.handling;
+    const canAim = input.aim && !!slot && !p.sprinting && p.sprintFireDelay <= 0 && p.reloadTimer <= 0 && p.switchTimer <= 0;
+    const aimSeconds = slot ? this.weapon(slot.weapon).aimSeconds : 1;
+    p.aim = canAim ? Math.min(1, p.aim + SIM_DT / aimSeconds) : Math.max(0, p.aim - (SIM_DT / aimSeconds) * hc.aimExitFactor);
+    p.bloom = Math.max(0, p.bloom - (SIM_DT / hc.bloomRecoverSeconds) * hc.bloomMax);
+
+    const aimSlow = 1 - (1 - hc.aimMoveFactor) * p.aim;
+    const speed = p.downed ? cp.crawlSpeed : (p.sprinting ? cp.sprintSpeed : cp.walkSpeed * aimSlow) * mobility;
     const sin = Math.sin(p.yaw);
     const cos = Math.cos(p.yaw);
     const tx = (cos * mx - sin * mz) * speed;
@@ -488,55 +510,119 @@ export class Game {
       p.current = target;
       p.switchTimer = this.cfg.player.weaponSwitchSeconds;
       p.reloadTimer = 0;
+      p.burstLeft = 0;
     }
 
     const slot = this.activeSlot();
     if (!slot) return;
     const w = this.weapon(slot.weapon);
+    const pressed = input.fire && !this.prev.fire;
 
     // Recarga en curso.
     if (p.reloadTimer > 0) {
-      p.reloadTimer -= SIM_DT;
-      if (p.reloadTimer <= 0) {
+      if (w.reloadMode === 'shell' && pressed && slot.mag > 0) {
+        // Cartucho a cartucho: disparar corta la recarga con lo que ya hay dentro.
         p.reloadTimer = 0;
-        const take = Math.min(this.magazineOf(slot) - slot.mag, slot.reserve);
-        slot.mag += take;
-        slot.reserve -= take;
+      } else {
+        p.reloadTimer -= SIM_DT;
+        if (p.reloadTimer <= 0) {
+          p.reloadTimer = 0;
+          if (w.reloadMode === 'shell') {
+            slot.mag++;
+            slot.reserve--;
+            const more = slot.mag < this.magazineOf(slot) && slot.reserve > 0;
+            this.events.push({ type: 'shellLoaded', weapon: w.id, last: !more });
+            if (more) p.reloadTimer = w.reloadSeconds;
+          } else {
+            const take = Math.min(this.magazineOf(slot) - slot.mag, slot.reserve);
+            slot.mag += take;
+            slot.reserve -= take;
+          }
+        }
       }
     }
 
-    const pressed = input.fire && !this.prev.fire;
     if (input.reload && !this.prev.reload) this.startReload(slot, w);
 
-    const wantsFire = w.fireMode === 'auto' ? input.fire : pressed;
+    // Automática: mientras se mantenga. Ráfaga: una pulsación suelta todos sus disparos. Semiautomática: uno por pulsación.
+    const wantsFire = w.fireMode === 'auto' ? input.fire : pressed || (w.fireMode === 'burst' && p.burstLeft > 0);
     // Esprintando el arma va bajada: no se dispara hasta un instante después de parar.
     if (!wantsFire || p.switchTimer > 0 || p.reloadTimer > 0 || p.fireCooldown > 0 || p.sprinting || p.sprintFireDelay > 0) return;
     if (slot.mag <= 0) {
+      p.burstLeft = 0;
       if (slot.reserve > 0) this.startReload(slot, w);
       else if (pressed) this.events.push({ type: 'dryFire', weapon: w.id });
       return;
     }
     slot.mag--;
-    p.fireCooldown = Math.max(p.fireCooldown, -SIM_DT) + 60 / w.rpm;
+    let wait = 60 / w.rpm;
+    if (w.fireMode === 'burst') {
+      p.burstLeft = (p.burstLeft > 0 ? p.burstLeft : w.burstCount) - 1;
+      if (slot.mag <= 0) p.burstLeft = 0;
+      if (p.burstLeft === 0) wait = w.burstDelaySeconds;
+    }
+    p.fireCooldown = Math.max(p.fireCooldown, -SIM_DT) + wait;
     this.events.push({ type: 'shot', weapon: w.id, upgraded: slot.upgraded });
     this.fire(w, slot.upgraded);
+    const hc = this.cfg.handling;
+    p.bloom = Math.min(hc.bloomMax, p.bloom + hc.bloomPerShot);
+  }
+
+  /** Dispersión actual del arma en la mano, en grados (la mitad del cono). La lee también el punto de mira. */
+  spreadDegrees(): number {
+    const slot = this.activeSlot();
+    if (!slot || this.opts.noSpread) return 0;
+    const p = this.player;
+    const w = this.weapon(slot.weapon);
+    const hc = this.cfg.handling;
+    const moving = Math.min(1, Math.hypot(p.vel.x, p.vel.z) / this.cfg.player.walkSpeed);
+    const hip = w.hipSpread * (1 + p.bloom) + hc.moveSpread * moving + (p.grounded ? 0 : hc.airSpread);
+    return hip + (w.aimSpread - hip) * p.aim;
+  }
+
+  /** Desvía una dirección dentro de un cono de `degrees` grados, repartiendo por igual en su círculo. */
+  private scatter(dir: Vec3, degrees: number): Vec3 {
+    if (degrees <= 0) return dir;
+    const angle = ((degrees * Math.PI) / 180) * Math.sqrt(this.spreadRng.next());
+    const around = this.spreadRng.next() * Math.PI * 2;
+    // Dos ejes perpendiculares a la dirección: a la derecha y hacia arriba.
+    const h = Math.hypot(dir.x, dir.z) || 1;
+    const rx = -dir.z / h;
+    const rz = dir.x / h;
+    const ux = -dir.y * rz;
+    const uy = rz * dir.x - rx * dir.z;
+    const uz = dir.y * rx;
+    const s = Math.sin(angle);
+    const c = Math.cos(angle);
+    const a = Math.cos(around) * s;
+    const b = Math.sin(around) * s;
+    return { x: dir.x * c + rx * a + ux * b, y: dir.y * c + uy * b, z: dir.z * c + rz * a + uz * b };
   }
 
   /** Un disparo: rayo que puede atravesar enemigos y, con el Arco voltaico, saltar entre ellos. */
   private fire(w: WeaponConfig, upgraded: boolean): void {
     const eye = this.eye();
-    const dir = this.lookDir();
+    const look = this.lookDir();
     const damage = w.damage * (upgraded ? this.cfg.forja.damageMultiplier : 1) * this.opts.damageScale;
+    const spread = this.spreadDegrees() + (this.opts.noSpread ? 0 : w.pelletSpread);
+    const at = (d: number, dir: Vec3): Vec3 => ({ x: eye.x + dir.x * d, y: eye.y + dir.y * d, z: eye.z + dir.z * d });
     for (let i = 0; i < w.pellets; i++) {
-      const hits = this.physics.raycastPierce(eye, dir, BULLET_RANGE, w.penetration);
+      const dir = this.scatter(look, spread);
+      const { hits, wall } = this.physics.raycastPierce(eye, dir, BULLET_RANGE, w.penetration);
+      let end = wall ? wall.distance : BULLET_RANGE;
       for (const hit of hits) {
         if (!hit.part) continue;
         const mult = hit.part === 'head' ? this.cfg.player.headMultiplier : hit.part === 'limb' ? this.cfg.player.limbMultiplier : 1;
         const first = this.enemies[hit.enemy]!;
         const from = { x: first.pos.x, y: first.pos.y + CHEST_HEIGHT, z: first.pos.z };
+        this.events.push({ type: 'impact', at: at(hit.distance, dir), normal: null, surface: 'enemy' });
         this.damageEnemy(hit.enemy, damage * mult, hit.part, upgraded);
         if (w.chain) this.chainFrom(hit.enemy, from, damage, w.chain.targets - 1, w.chain.range, upgraded);
       }
+      // La bala que ya no atraviesa más se queda en el último enemigo.
+      if (!wall && hits.length >= w.penetration) end = hits[hits.length - 1]!.distance;
+      if (wall) this.events.push({ type: 'impact', at: at(wall.distance, dir), normal: wall.normal, surface: 'world' });
+      this.events.push({ type: 'tracer', to: at(end, dir) });
     }
   }
 

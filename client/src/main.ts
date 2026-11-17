@@ -140,7 +140,7 @@ async function start(): Promise<void> {
     stats = new PlayStats();
     el('over-stats').hidden = true;
     // Solo en el servidor de desarrollo: acceso a la partida para pruebas automáticas. No existe en el build publicado.
-    if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio });
+    if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio, __view: view });
     input.setView(game.player.yaw, 0);
     input.releaseAll();
     hud.reset();
@@ -196,6 +196,10 @@ async function start(): Promise<void> {
         g.step(input.next());
         stats.onStep(g);
         for (const ev of g.events) {
+          if (ev.type === 'shot') {
+            const w = g.cfg.weapons[ev.weapon];
+            if (w) input.addRecoil(w, g.cfg.handling, g.player.aim);
+          }
           hud.onEvent(ev);
           view.onEvent(ev, g);
           audio.onEvent(ev, g);
@@ -214,13 +218,16 @@ async function start(): Promise<void> {
     }
 
     if (game) {
+      if (state === 'playing') input.recover(game.cfg.handling, frameSeconds);
       view.update(game, alpha, input.yaw, input.pitch, state === 'playing' ? frameSeconds : 0);
+      input.setSensitivityScale(view.zoom);
       hud.update(game, frameSeconds);
+      hud.setAim(game, view.camera.fov, window.innerHeight, view.viewmodel.aimAmount, view.viewmodel.scoped);
       const step = state === 'playing' && !game.player.downed ? tutorial.current(tutorialView(game)) : null;
       hud.setHint(step ? t(`tutorial.${step}` as TextKey) : null);
       if (state === 'playing') audio.update(game, view.camera.position, input.yaw);
     }
-    renderer.render(view.scene, view.camera);
+    view.render(renderer);
     const info = renderer.info.render as { drawCalls?: number; calls?: number; triangles?: number };
     perf.frame(frameSeconds, info.drawCalls ?? info.calls ?? 0, info.triangles ?? 0);
   });
