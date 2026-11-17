@@ -1,0 +1,16 @@
+<!doctype html>
+<!--
+  Entrada para la vista previa de Patch Desktop, que sirve esta carpeta tal cual y
+  sin compilar: lleva al build de dist/ (hay que generarlo antes con npm run build).
+  El juego publicado no usa este archivo: se publica dist/.
+-->
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
+    <script>
+      location.replace('./dist/index.html' + location.search);
+    </script>
+  </head>
+  <body style="background: #10151b"></body>
+</html>
