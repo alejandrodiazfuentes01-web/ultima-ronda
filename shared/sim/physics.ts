@@ -67,6 +67,12 @@ export interface RayHit {
   part: HitPart | null;
 }
 
+/** Resultado de un disparo: enemigos atravesados y, si la bala acaba en el escenario, dónde. */
+export interface PierceResult {
+  hits: RayHit[];
+  wall: { distance: number; normal: Vec3 } | null;
+}
+
 export class Physics {
   readonly world: World;
   private readonly controller;
@@ -164,22 +170,23 @@ export class Physics {
    * Rayo que atraviesa hasta `maxEnemies` enemigos distintos y se para en el escenario.
    * Devuelve los impactos en orden de distancia.
    */
-  raycastPierce(origin: Vec3, dir: Vec3, maxDistance: number, maxEnemies: number): RayHit[] {
+  raycastPierce(origin: Vec3, dir: Vec3, maxDistance: number, maxEnemies: number): PierceResult {
     const hits: RayHit[] = [];
     const skip = new Set<number>();
     const ray = new RAPIER.Ray(origin, dir);
     for (let i = 0; i < maxEnemies; i++) {
-      const hit = this.world.castRay(ray, maxDistance, true, undefined, G_RAY, undefined, undefined, (c) => {
+      const hit = this.world.castRayAndGetNormal(ray, maxDistance, true, undefined, G_RAY, undefined, undefined, (c) => {
         const part = this.enemyParts.get(c.handle);
         return !part || !skip.has(part.enemy);
       });
       if (!hit) break;
       const part = this.enemyParts.get(hit.collider.handle);
-      if (!part) break; // escenario: la bala se para
+      // Escenario: la bala se para ahí.
+      if (!part) return { hits, wall: { distance: hit.timeOfImpact, normal: { x: hit.normal.x, y: hit.normal.y, z: hit.normal.z } } };
       skip.add(part.enemy);
       hits.push({ distance: hit.timeOfImpact, enemy: part.enemy, part: part.part });
     }
-    return hits;
+    return { hits, wall: null };
   }
 
   raycast(origin: Vec3, dir: Vec3, maxDistance: number): RayHit | null {

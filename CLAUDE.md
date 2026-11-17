@@ -91,6 +91,8 @@ npm run preview    sirve el build de dist/ (http://localhost:4173)
 npm test           pruebas, incluido el jugador automático de 30 rondas (unos 40 s)
 ```
 
+El `index.html` de la raíz solo sirve para la vista previa de Patch Desktop: lleva a `dist/`, así que tras cada cambio hay que ejecutar `npm run build` para que la vista previa lo enseñe.
+
 Para medir el renderizador: el contador de arriba a la izquierda muestra fotogramas, el 1 % más lento, llamadas de dibujo, triángulos y el renderizador en uso. Añadir `?renderer=webgl` a la dirección fuerza WebGL 2.
 
 Herramientas de prueba en la dirección del juego (el jugador normal no las ve):
@@ -99,5 +101,5 @@ Herramientas de prueba en la dirección del juego (el jugador normal no las ve):
 ?ronda=8         empieza la partida en la ronda 8
 &puntos=5000     empieza con esos puntos
 ?pruebas         al caer, enseña el resumen de la partida con un botón para copiarlo
-?mapa=amplio     mapa de prueba con un 50 % más de espacio libre (se regenera con scripts/generar-mapa-amplio.py)
+?mapa=amplio     mapa de prueba con un 50 % más de espacio libre (se regenera con node scripts/generar-mapa-amplio.mjs)
 ```

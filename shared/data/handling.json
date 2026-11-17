@@ -1,0 +1,34 @@
+{
+  "aimMoveFactor": 0.6,
+  "aimExitFactor": 1.5,
+  "moveSpread": 1.2,
+  "airSpread": 3,
+  "bloomPerShot": 0.2,
+  "bloomMax": 1,
+  "bloomRecoverSeconds": 0.9,
+  "recoilAimFactor": 0.7,
+  "recoilRecoverPerSecond": 7,
+  "recoilMaxDegrees": 8,
+  "recoil": {
+    "none": {
+      "pitch": 0,
+      "yaw": 0
+    },
+    "low": {
+      "pitch": 0.5,
+      "yaw": 0.25
+    },
+    "medium": {
+      "pitch": 0.9,
+      "yaw": 0.4
+    },
+    "high": {
+      "pitch": 1.4,
+      "yaw": 0.6
+    },
+    "veryHigh": {
+      "pitch": 3.5,
+      "yaw": 0.8
+    }
+  }
+}

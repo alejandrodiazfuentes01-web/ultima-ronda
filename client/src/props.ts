@@ -7,7 +7,7 @@ import * as THREE from 'three/webgpu';
 import type { Fixture, MapConfig } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { placeModel } from './models';
-import { WEAPON_SHAPES, buildWeapon } from './weaponShapes';
+import { WEAPON_IDS, buildWeapon } from './weapons/build';
 
 /** Color del brillo de cada suero. */
 const PERK_GLOW: Record<string, number> = { coraza: 0xffa040, segundoAliento: 0x4fe0ff };
@@ -22,9 +22,9 @@ class WeaponDisplay {
   private shown: string | null = null;
 
   constructor(scene: THREE.Scene) {
-    for (const id of Object.keys(WEAPON_SHAPES)) {
+    for (const id of WEAPON_IDS) {
       for (const upgraded of [false, true]) {
-        const g = buildWeapon(id, upgraded);
+        const g = buildWeapon(id, upgraded).root;
         g.scale.setScalar(1.6);
         g.visible = false;
         this.guns.set(`${id}:${upgraded}`, g);

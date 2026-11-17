@@ -16,7 +16,7 @@ afterEach(() => {
 function newGame(opts: SimOptions = {}, tweak?: (c: GameConfig) => void): Game {
   const cfg = loadConfig();
   tweak?.(cfg);
-  const g = new Game(cfg, { autoRounds: false, invulnerable: true, ...opts });
+  const g = new Game(cfg, { autoRounds: false, invulnerable: true, noSpread: true, ...opts });
   games.push(g);
   return g;
 }

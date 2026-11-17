@@ -14,11 +14,15 @@ import { Effects } from './effects';
 import { Props } from './props';
 import { labFloorTexture, labWallTexture } from './textures';
 import { Viewmodel } from './viewmodel';
+import { buildWeapon } from './weapons/build';
 
 /** Metros que cubre una repetición de las texturas del Laboratorio. */
 const TEXTURE_METERS = 2;
 /** Altura de los ojos al estar caído. */
 const DOWNED_EYE = 0.55;
+/** Campo de visión del mundo sin apuntar (aspecto, no balance). */
+const BASE_FOV = 75;
+const MUZZLE_LIGHT = 9;
 
 const COLORS = {
   sky: 0x10151b,
@@ -112,8 +116,12 @@ const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
 export class GameView {
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
-  private readonly viewmodel: Viewmodel;
+  readonly camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.02, 80);
+  readonly viewmodel: Viewmodel;
+  /** Destello del disparo en el mundo: ilumina la sala un instante. */
+  private readonly muzzleLight = new THREE.PointLight(0xffc68a, 0, 8, 2);
+  private muzzleLightTime = 0;
+  private readonly muzzle = new THREE.Vector3();
   private readonly enemyViews: EnemyViews;
   private readonly planks: THREE.InstancedMesh;
   private readonly plankMatrices: THREE.Matrix4[] = [];
@@ -172,15 +180,15 @@ export class GameView {
 
     // Taquillas de armería: panel en el muro con la silueta del arma.
     const lockerMat = new THREE.MeshStandardMaterial({ color: COLORS.locker, roughness: 0.5, emissive: COLORS.locker, emissiveIntensity: 0.25 });
-    const gunMat = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.6 });
     for (const b of map.wallBuys) {
       const group = new THREE.Group();
       group.add(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 0.06), lockerMat));
-      const gun = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.16, 0.08), gunMat);
-      gun.position.z = 0.06;
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.08), gunMat);
-      grip.position.set(-0.05, -0.15, 0.06);
-      group.add(gun, grip);
+      // El arma que se vende, colgada de lado en el panel con el cañón a la izquierda.
+      const gun = buildWeapon(b.weapon).root;
+      gun.scale.setScalar(1.5);
+      gun.rotation.y = Math.PI / 2;
+      gun.position.set(0.05, 0.02, 0.09);
+      group.add(gun);
       // El ancla está delante del muro; el panel va pegado a él.
       group.position.set(b.anchor[0] - b.facing[0] * 0.66, 1.5, b.anchor[1] - b.facing[1] * 0.66);
       group.rotation.y = Math.atan2(b.facing[0], b.facing[1]);
@@ -225,6 +233,7 @@ export class GameView {
     this.enemyViews = new EnemyViews(this.scene, poolSize);
 
     this.viewmodel = new Viewmodel(this.camera);
+    this.scene.add(this.muzzleLight);
     this.props = new Props(this.scene, map);
     this.effects = new Effects(this.scene);
   }
@@ -234,9 +243,26 @@ export class GameView {
     this.camera.updateProjectionMatrix();
   }
 
+  render(renderer: THREE.WebGPURenderer): void {
+    renderer.render(this.scene, this.camera);
+  }
+
+  /** Cuánto se ha cerrado la vista al apuntar: 1 sin apuntar, menos de 1 apuntando. Para la sensibilidad del ratón. */
+  get zoom(): number {
+    return Math.tan(((this.camera.fov / 2) * Math.PI) / 180) / Math.tan(((BASE_FOV / 2) * Math.PI) / 180);
+  }
+
   onEvent(ev: SimEvent, game: Game): void {
     if (ev.type === 'landed') this.landKick = Math.min(0.12, ev.speed * 0.018);
-    this.viewmodel.onEvent(ev);
+    this.viewmodel.onEvent(ev, game);
+    if (ev.type === 'shot') {
+      this.muzzleLightTime = 0.05;
+      this.muzzleLight.color.setHex(ev.weapon === 'arco' ? 0x7fd0ff : 0xffc68a);
+    } else if (ev.type === 'tracer') {
+      // Las trazadoras salen de la boca del cañón que se ve en pantalla.
+      this.camera.updateMatrixWorld();
+      this.effects.tracer(this.viewmodel.muzzleWorld(this.camera, this.muzzle), ev.to);
+    }
     this.enemyViews.onEvent(ev);
     this.effects.onEvent(ev, game);
   }
@@ -278,7 +304,22 @@ export class GameView {
     });
 
     const slot = game.activeSlot();
-    this.viewmodel.update(game, slot?.weapon ?? null, slot?.upgraded ?? false, frameSeconds);
+    this.viewmodel.update(game, slot?.weapon ?? null, slot?.upgraded ?? false, frameSeconds, yaw, pitch);
+    // Al apuntar se cierra el campo de visión, según la mira de cada arma.
+    const aimZoom = slot ? (game.cfg.weapons[slot.weapon]?.aimZoom ?? 1) : 1;
+    const fov = BASE_FOV * (1 - (1 - aimZoom) * this.viewmodel.aimAmount);
+    if (Math.abs(fov - this.camera.fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.viewmodel.setZoom(aimZoom, fov);
+    // Destello del disparo: la luz se coloca en la boca del cañón y se apaga enseguida.
+    this.muzzleLightTime = Math.max(0, this.muzzleLightTime - frameSeconds);
+    this.muzzleLight.intensity = this.muzzleLightTime > 0 ? MUZZLE_LIGHT : 0;
+    if (this.muzzleLightTime > 0) {
+      this.camera.updateMatrixWorld();
+      this.muzzleLight.position.copy(this.viewmodel.muzzleWorld(this.camera, this.muzzle));
+    }
     this.props.update(game, frameSeconds, this.time);
     this.effects.update(game, frameSeconds, this.time);
   }

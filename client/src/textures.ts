@@ -143,3 +143,55 @@ export function labFloorTexture(): THREE.CanvasTexture {
   grime(g, size, rand, 22, 'rgba(50,45,35,0.3)');
   return toTexture(c);
 }
+
+/** Fogonazo: una estrella de puntas irregulares con el centro casi blanco, sobre fondo negro (se suma a la luz). */
+export function flashTexture(): THREE.CanvasTexture {
+  const size = 128;
+  const [c, g] = canvas(size);
+  const rand = seeded(7);
+  const mid = size / 2;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, size, size);
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rand() * 0.3;
+    const len = mid * (0.55 + rand() * 0.45);
+    const w = 0.16 + rand() * 0.1;
+    const grad = g.createLinearGradient(mid, mid, mid + Math.cos(a) * len, mid + Math.sin(a) * len);
+    grad.addColorStop(0, 'rgba(255,230,180,0.9)');
+    grad.addColorStop(1, 'rgba(255,120,30,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(mid + Math.cos(a - w) * 6, mid + Math.sin(a - w) * 6);
+    g.lineTo(mid + Math.cos(a) * len, mid + Math.sin(a) * len);
+    g.lineTo(mid + Math.cos(a + w) * 6, mid + Math.sin(a + w) * 6);
+    g.closePath();
+    g.fill();
+  }
+  const core = g.createRadialGradient(mid, mid, 0, mid, mid, mid * 0.45);
+  core.addColorStop(0, 'rgba(255,255,240,1)');
+  core.addColorStop(0.4, 'rgba(255,200,120,0.7)');
+  core.addColorStop(1, 'rgba(255,120,30,0)');
+  g.fillStyle = core;
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** Agujero de bala: un punto oscuro con el borde quemado y transparente. */
+export function bulletHoleTexture(): THREE.CanvasTexture {
+  const size = 64;
+  const [c, g] = canvas(size);
+  const mid = size / 2;
+  const grad = g.createRadialGradient(mid, mid, 0, mid, mid, mid);
+  grad.addColorStop(0, 'rgba(8,8,8,1)');
+  grad.addColorStop(0.22, 'rgba(15,14,13,0.95)');
+  grad.addColorStop(0.45, 'rgba(40,36,32,0.55)');
+  grad.addColorStop(1, 'rgba(40,36,32,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}

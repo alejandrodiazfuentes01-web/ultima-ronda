@@ -18,6 +18,8 @@ export interface PlayerInput {
   sprint: boolean;
   jump: boolean;
   fire: boolean;
+  /** Apuntar con la mira (se mantiene pulsado). */
+  aim: boolean;
   reload: boolean;
   use: boolean;
   melee: boolean;
@@ -36,6 +38,7 @@ export function emptyInput(): PlayerInput {
     sprint: false,
     jump: false,
     fire: false,
+    aim: false,
     reload: false,
     use: false,
     melee: false,
@@ -53,6 +56,9 @@ export type SimEvent =
   | { type: 'points'; amount: number }
   | { type: 'melee'; hit: boolean }
   | { type: 'reloadStart'; weapon: string }
+  | { type: 'shellLoaded'; weapon: string; last: boolean }
+  | { type: 'tracer'; to: Vec3 }
+  | { type: 'impact'; at: Vec3; normal: Vec3 | null; surface: 'world' | 'enemy' }
   | { type: 'purchase'; what: 'weapon' | 'ammo' | 'door' | 'perk' | 'contenedor' | 'forja'; id: string }
   | { type: 'denied'; cost: number }
   | { type: 'roundStart'; round: number }
@@ -109,4 +115,6 @@ export interface SimOptions {
   startRound?: number;
   /** Puntos con los que empieza, en lugar de los de player.json (herramienta de prueba). */
   startPoints?: number;
+  /** Las balas van justo a donde se mira (pruebas de reglas que no tratan de la dispersión). */
+  noSpread?: boolean;
 }

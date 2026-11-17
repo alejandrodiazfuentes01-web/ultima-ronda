@@ -1,14 +1,21 @@
 /**
  * Teclado y ratón (regla 6): ratón capturado con Pointer Lock, nada en Ctrl,
  * y Escape lo gestiona el navegador soltando el ratón, que abre la pausa.
+ * Clic izquierdo dispara y clic derecho apunta con la mira.
+ *
+ * El retroceso de las armas también vive aquí: cada disparo sube la vista, que
+ * vuelve sola poco a poco; tirar del ratón hacia abajo lo compensa.
  */
+import type { HandlingConfig, WeaponConfig } from '../../shared/config';
 import { emptyInput, type PlayerInput } from '../../shared/sim/types';
 
 /** Sensibilidad del ratón en radianes por píxel. Pasará a Ajustes en la fase 3. */
 const MOUSE_SENSITIVITY = 0.0022;
 const MAX_PITCH = 1.5;
 
-type Action = 'fire' | 'jump' | 'reload' | 'use' | 'melee' | 'sprint';
+type Action = 'fire' | 'aim' | 'jump' | 'reload' | 'use' | 'melee' | 'sprint';
+
+const DEG = Math.PI / 180;
 
 const KEY_ACTIONS: Record<string, Action> = {
   Space: 'jump',
@@ -25,9 +32,14 @@ export class Input {
   yaw = 0;
   pitch = 0;
   private readonly keys = new Set<string>();
-  private readonly held: Record<Action, boolean> = { fire: false, jump: false, reload: false, use: false, melee: false, sprint: false };
+  private readonly held: Record<Action, boolean> = { fire: false, aim: false, jump: false, reload: false, use: false, melee: false, sprint: false };
   /** Pulsaciones cortas que podrían caer entre dos pasos: se cuentan en el siguiente. */
-  private readonly tapped: Record<Action, boolean> = { fire: false, jump: false, reload: false, use: false, melee: false, sprint: false };
+  private readonly tapped: Record<Action, boolean> = { fire: false, aim: false, jump: false, reload: false, use: false, melee: false, sprint: false };
+  /** La sensibilidad baja al apuntar, en proporción a lo que se cierra la vista. */
+  private sensitivityScale = 1;
+  /** Retroceso acumulado que aún no se ha recuperado, en radianes. */
+  private recoilPitch = 0;
+  private recoilYaw = 0;
   private pendingSlot: number | null = null;
   private pendingCycle = 0;
   private readonly sample: PlayerInput = emptyInput();
@@ -37,15 +49,23 @@ export class Input {
     document.addEventListener('keyup', (e) => this.onKey(e, false));
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
-      this.yaw -= e.movementX * MOUSE_SENSITIVITY;
-      this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - e.movementY * MOUSE_SENSITIVITY));
+      const sens = MOUSE_SENSITIVITY * this.sensitivityScale;
+      this.yaw -= e.movementX * sens;
+      this.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, this.pitch - e.movementY * sens));
+      // Bajar el ratón compensa el retroceso: lo que ya se ha bajado a mano no vuelve solo.
+      if (e.movementY > 0) this.recoilPitch = Math.max(0, this.recoilPitch - e.movementY * sens);
     });
     document.addEventListener('mousedown', (e) => {
-      if (this.locked && e.button === 0) this.set('fire', true);
+      if (!this.locked) return;
+      if (e.button === 0) this.set('fire', true);
+      if (e.button === 2) this.set('aim', true);
     });
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.set('fire', false);
+      if (e.button === 2) this.set('aim', false);
     });
+    // El clic derecho apunta: nunca abre el menú del navegador.
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener(
       'wheel',
       (e) => {
@@ -81,6 +101,37 @@ export class Input {
   setView(yaw: number, pitch: number): void {
     this.yaw = yaw;
     this.pitch = pitch;
+    this.recoilPitch = 0;
+    this.recoilYaw = 0;
+  }
+
+  /** 1 sin apuntar; menos al apuntar, para que el ratón mueva la mira lo mismo en pantalla. */
+  setSensitivityScale(scale: number): void {
+    this.sensitivityScale = scale;
+  }
+
+  /** Un disparo sube la vista y la desvía un poco a un lado (handling.json). `aim` va de 0 a 1. */
+  addRecoil(w: WeaponConfig, h: HandlingConfig, aim: number): void {
+    const level = h.recoil[w.recoil];
+    const factor = 1 - (1 - h.recoilAimFactor) * aim;
+    const room = Math.max(0, h.recoilMaxDegrees * DEG - this.recoilPitch);
+    const up = Math.min(room, level.pitch * DEG * factor * (0.85 + Math.random() * 0.3));
+    const side = level.yaw * DEG * factor * (Math.random() * 2 - 1);
+    this.recoilPitch += up;
+    this.recoilYaw += side;
+    this.pitch = Math.min(MAX_PITCH, this.pitch + up);
+    this.yaw += side;
+  }
+
+  /** La vista vuelve sola hacia donde estaba antes del retroceso. */
+  recover(h: HandlingConfig, dt: number): void {
+    const k = 1 - Math.exp(-h.recoilRecoverPerSecond * dt);
+    const dp = this.recoilPitch * k;
+    const dy = this.recoilYaw * k;
+    this.recoilPitch -= dp;
+    this.recoilYaw -= dy;
+    this.pitch = Math.max(-MAX_PITCH, this.pitch - dp);
+    this.yaw -= dy;
   }
 
   /** Entrada para el siguiente paso de simulación. Reutiliza el mismo objeto. */
@@ -91,6 +142,7 @@ export class Input {
     s.yaw = this.yaw;
     s.pitch = this.pitch;
     s.fire = this.consume('fire');
+    s.aim = this.consume('aim');
     s.jump = this.consume('jump');
     s.reload = this.consume('reload');
     s.use = this.consume('use');

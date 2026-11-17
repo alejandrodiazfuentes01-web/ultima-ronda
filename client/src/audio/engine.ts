@@ -11,14 +11,32 @@ import { VoiceLimiter, nextVoiceTime, voiceKind, type VoiceKind } from './voices
 const MASTER = 0.6;
 const MUSIC = 1;
 
-/** Timbre de disparo por arma: frecuencia del chasquido, duración y golpe grave. */
-const SHOT: Record<string, { freq: number; dur: number; gain: number; thump: number }> = {
-  m1911: { freq: 1700, dur: 0.13, gain: 2.2, thump: 140 },
-  smg5: { freq: 2500, dur: 0.07, gain: 1.5, thump: 170 },
-  mk17: { freq: 1300, dur: 0.15, gain: 2.4, thump: 110 },
-  m249: { freq: 1900, dur: 0.1, gain: 1.9, thump: 130 },
-  svd: { freq: 1100, dur: 0.22, gain: 2.6, thump: 90 },
+/**
+ * Timbre de disparo por arma: frecuencia del cuerpo del estampido, su duración,
+ * volumen, golpe grave y cuánto suena en la sala (eco).
+ */
+interface ShotSound {
+  freq: number;
+  dur: number;
+  gain: number;
+  thump: number;
+  room: number;
+}
+const SHOT: Record<string, ShotSound> = {
+  m1911: { freq: 1700, dur: 0.13, gain: 2.2, thump: 140, room: 0.5 },
+  m870: { freq: 900, dur: 0.24, gain: 2.9, thump: 65, room: 0.8 },
+  smg5: { freq: 2500, dur: 0.07, gain: 1.5, thump: 170, room: 0.35 },
+  v45: { freq: 2700, dur: 0.06, gain: 1.4, thump: 185, room: 0.3 },
+  ak74: { freq: 1450, dur: 0.13, gain: 2.3, thump: 100, room: 0.6 },
+  m16: { freq: 2000, dur: 0.1, gain: 2, thump: 125, room: 0.5 },
+  mk17: { freq: 1300, dur: 0.15, gain: 2.4, thump: 95, room: 0.65 },
+  m249: { freq: 1900, dur: 0.1, gain: 1.9, thump: 120, room: 0.5 },
+  svd: { freq: 1100, dur: 0.22, gain: 2.6, thump: 80, room: 0.9 },
 };
+/** Fracciones de la recarga en que suenan el cargador al salir, al entrar y la corredera (van con la animación). */
+const RELOAD_MARKS = { out: 0.16, in: 0.63, rackBack: 0.8, rackForward: 0.9 };
+/** Segundos tras el disparo en que suena el bombeo de la escopeta. */
+const PUMP_MARKS = [0.16, 0.44];
 
 /** Notas en hercios. */
 const NOTE = { G3: 196, C4: 261.6, E4: 329.6, G4: 392, C5: 523.3, E5: 659.3, G5: 784, B5: 987.8, E6: 1318.5 };
@@ -38,7 +56,7 @@ const PERK_TUNE: Record<string, Array<[number, number]>> = {
     [NOTE.E6, 0.3],
   ],
 };
-const DEFAULT_SHOT = { freq: 2000, dur: 0.1, gain: 1.8, thump: 150 };
+const DEFAULT_SHOT: ShotSound = { freq: 2000, dur: 0.1, gain: 1.8, thump: 150, room: 0.5 };
 
 /** Volumen de las sirenas de ronda. */
 const SIREN = 0.26;
@@ -55,6 +73,9 @@ export class AudioEngine {
   private ctx: Ctx | null = null;
   private master!: GainNode;
   private sfx!: GainNode;
+  /** Envío al eco de la sala (reverberación). */
+  private room!: GainNode;
+  private lastAim = 0;
   private music!: GainNode;
   private musicFilter!: BiquadFilterNode;
   private musicPulse!: OscillatorNode;
@@ -96,6 +117,25 @@ export class AudioEngine {
     this.master.connect(comp).connect(limiter).connect(ctx.destination);
     this.sfx = ctx.createGain();
     this.sfx.connect(this.master);
+
+    // Eco de sala: una respuesta de ruido que se apaga, generada aquí (sin archivos).
+    const seconds = 1.3;
+    const ir = ctx.createBuffer(2, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = ir.getChannelData(c);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 4.2) * (t < 0.012 ? t / 0.012 : 1);
+      }
+    }
+    const convolver = ctx.createConvolver();
+    convolver.buffer = ir;
+    const roomTone = ctx.createBiquadFilter();
+    roomTone.type = 'lowpass';
+    roomTone.frequency.value = 3200;
+    this.room = ctx.createGain();
+    this.room.gain.value = 0.32;
+    this.room.connect(convolver).connect(roomTone).connect(this.master);
 
     // Ruido blanco reutilizable.
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
@@ -209,9 +249,15 @@ export class AudioEngine {
     const s = SHOT[weapon] ?? DEFAULT_SHOT;
     // Arma mejorada en La Forja: un brillo agudo encima del disparo.
     if (upgraded) this.tone(this.sfx, t, { type: 'sawtooth', freq: 1800, freqEnd: 900, dur: 0.08, gain: 0.08 });
-    this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: s.freq, freqEnd: s.freq * 0.4, q: 0.7, dur: s.dur, gain: s.gain });
-    this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 900, dur: s.dur * 1.6, gain: s.gain * 0.5 });
-    this.tone(this.sfx, t, { type: 'sine', freq: s.thump, freqEnd: 45, dur: 0.12, gain: Math.min(0.8, s.gain * 0.35) });
+    // Cuatro capas: chasquido seco, estampido, cola grave y golpe en el pecho. Cada disparo varía un poco.
+    const v = 0.94 + Math.random() * 0.12;
+    this.noiseBurst(this.sfx, t, { type: 'highpass', freq: 5000, attack: 0.001, dur: 0.012, gain: s.gain * 0.6 });
+    this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: s.freq * v, freqEnd: s.freq * 0.35, q: 0.7, dur: s.dur, gain: s.gain });
+    this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 900 * v, freqEnd: 250, dur: s.dur * 2.2, gain: s.gain * 0.55 });
+    this.tone(this.sfx, t, { type: 'sine', freq: s.thump * v, freqEnd: 40, dur: 0.14, gain: Math.min(0.9, s.gain * 0.38) });
+    // Lo que rebota en las paredes.
+    this.noiseBurst(this.room, t, { type: 'bandpass', freq: s.freq * 0.6, q: 0.6, dur: s.dur * 1.5, gain: s.gain * s.room });
+    if (weapon === 'm870') for (const at of PUMP_MARKS) this.click(t + at, 1400, 0.22);
   }
 
   /** Descarga eléctrica (Arco voltaico). */
@@ -231,11 +277,21 @@ export class AudioEngine {
     this.tone(this.sfx, at, { type: 'square', freq: freq * 0.5, dur: 0.02, gain: gain * 0.3 });
   }
 
-  private reload(seconds: number): void {
+  private reload(weapon: string, seconds: number): void {
     const t = this.now;
-    this.click(t + 0.12, 2600, 0.1); // sale el cargador
-    this.click(t + seconds * 0.7, 1500, 0.14); // entra el cargador
-    this.noiseBurst(this.sfx, t + seconds * 0.88, { type: 'bandpass', freq: 3000, freqEnd: 1200, q: 2, dur: 0.09, gain: 0.12 }); // corredera
+    if (weapon === 'arco') {
+      // El Arco voltaico se recarga con un zumbido que sube.
+      this.click(t + seconds * RELOAD_MARKS.out, 2600, 0.1);
+      this.click(t + seconds * RELOAD_MARKS.in, 1500, 0.14);
+      this.tone(this.sfx, t + seconds * RELOAD_MARKS.in, { type: 'sawtooth', freq: 120, freqEnd: 900, attack: 0.05, dur: seconds * 0.3, gain: 0.05 });
+      return;
+    }
+    this.click(t + seconds * RELOAD_MARKS.out, 2600, 0.12); // sale el cargador
+    this.noiseBurst(this.sfx, t + seconds * RELOAD_MARKS.out + 0.05, { type: 'bandpass', freq: 1800, q: 1.5, dur: 0.06, gain: 0.08 });
+    this.click(t + seconds * RELOAD_MARKS.in, 1500, 0.18); // entra el cargador
+    this.tone(this.sfx, t + seconds * RELOAD_MARKS.in, { type: 'sine', freq: 180, freqEnd: 90, dur: 0.05, gain: 0.15 });
+    this.click(t + seconds * RELOAD_MARKS.rackBack, 2200, 0.14); // corredera atrás
+    this.noiseBurst(this.sfx, t + seconds * RELOAD_MARKS.rackForward, { type: 'bandpass', freq: 3000, freqEnd: 1200, q: 2, dur: 0.09, gain: 0.16 }); // y adelante
   }
 
   private siren(rising: boolean): void {
@@ -333,8 +389,16 @@ export class AudioEngine {
       case 'dryFire':
         this.click(t, 3000, 0.2);
         break;
-      case 'reloadStart':
-        this.reload(game.cfg.weapons[ev.weapon]?.reloadSeconds ?? 1.5);
+      case 'reloadStart': {
+        const w = game.cfg.weapons[ev.weapon];
+        if (w && w.reloadMode === 'magazine') this.reload(ev.weapon, w.reloadSeconds);
+        break;
+      }
+      case 'shellLoaded':
+        // Cartucho dentro: roce y golpe seco; tras el último, se cierra.
+        this.noiseBurst(this.sfx, t, { type: 'bandpass', freq: 2200, q: 1.4, dur: 0.05, gain: 0.12 });
+        this.tone(this.sfx, t + 0.03, { type: 'sine', freq: 210, freqEnd: 120, dur: 0.05, gain: 0.18 });
+        if (ev.last) this.click(t + 0.25, 1400, 0.2);
         break;
       case 'hit':
         if (ev.killed) {
@@ -538,6 +602,11 @@ export class AudioEngine {
       (l as unknown as { setPosition(x: number, y: number, z: number): void }).setPosition(ear.x, ear.y, ear.z);
       (l as unknown as { setOrientation(a: number, b: number, c: number, d: number, e: number, f: number): void }).setOrientation(fx, 0, fz, 0, 1, 0);
     }
+
+    // Al subir la mira, un roce de ropa.
+    const aim = game.player.aim;
+    if (aim > 0 && this.lastAim === 0) this.noiseBurst(this.sfx, this.now, { type: 'bandpass', freq: 900, q: 0.8, attack: 0.04, dur: 0.12, gain: 0.07 });
+    this.lastAim = aim;
 
     const now = this.now;
     const p = game.player.pos;
