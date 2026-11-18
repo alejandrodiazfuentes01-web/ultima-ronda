@@ -253,6 +253,31 @@ export class GameView {
     renderer.render(this.scene, this.camera);
   }
 
+  /**
+   * Prepara de antemano todo lo que se puede llegar a dibujar: materiales, sombreadores
+   * y texturas de todo el mapa, los enemigos, las armas y los efectos. Sin esto, la
+   * tarjeta gráfica los prepara la primera vez que entran en pantalla, y eso da tirones
+   * (al entrar en el Laboratorio, al ver el primer lobo, al primer disparo).
+   */
+  async warmUp(renderer: THREE.WebGPURenderer): Promise<void> {
+    const saved: Array<[THREE.Object3D, boolean, boolean]> = [];
+    this.scene.traverse((o) => {
+      saved.push([o, o.visible, o.frustumCulled]);
+      o.visible = true;
+      o.frustumCulled = false;
+    });
+    try {
+      await renderer.compileAsync(this.scene, this.camera);
+      // Un dibujo con todo a la vista sube también las texturas a la tarjeta.
+      renderer.render(this.scene, this.camera);
+    } finally {
+      for (const [o, visible, culled] of saved) {
+        o.visible = visible;
+        o.frustumCulled = culled;
+      }
+    }
+  }
+
   /** Cuánto se ha cerrado la vista al apuntar: 1 sin apuntar, menos de 1 apuntando. Para la sensibilidad del ratón. */
   get zoom(): number {
     return Math.tan(((this.camera.fov / 2) * Math.PI) / 180) / Math.tan(((BASE_FOV / 2) * Math.PI) / 180);

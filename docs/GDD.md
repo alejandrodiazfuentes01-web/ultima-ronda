@@ -352,7 +352,7 @@ Presupuestos que el juego no puede superar:
 Cuatro decisiones de implementación que evitan los problemas habituales:
 
 1. **Paso fijo con interpolación.** La simulación va a 60 Hz aunque el monitor vaya a 144. CrazyGames exige física consistente a distintas tasas de refresco.
-2. **Resolución dinámica.** Si los fotogramas caen, baja la resolución interna antes que la calidad de juego.
+2. **Resolución dinámica.** Si los fotogramas caen, baja la resolución interna antes que la calidad de juego. Hecho el 2026-11-18: por debajo de 50 fotogramas baja la resolución hasta un 55 % de la de la pantalla, y vuelve a subir poco a poco. Además, todo lo que se puede dibujar se prepara mientras carga el juego, para que no haya tirones la primera vez que algo entra en pantalla.
 3. **Reutilización de objetos.** Enemigos, casquillos, partículas y números flotantes salen de reservas fijas. Crear y destruir objetos en plena horda provoca tirones.
 4. **Controles sin atajos del navegador.** No asignes nada a Ctrl: Ctrl + W cierra la pestaña. Escape libera el ratón, así que Escape es siempre el menú de pausa.
 
