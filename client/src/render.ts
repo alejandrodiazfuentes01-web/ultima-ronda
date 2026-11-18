@@ -23,6 +23,10 @@ const DOWNED_EYE = 0.55;
 /** Campo de visión del mundo sin apuntar (aspecto, no balance). */
 const BASE_FOV = 75;
 const MUZZLE_LIGHT = 9;
+/** Distancia a la que la niebla lo tapa todo, normal y durante La Jauría. */
+const FOG_FAR = 30;
+const PACK_FOG_FAR = 15;
+const PACK_FOG_COLOR = new THREE.Color(0x241414);
 
 const COLORS = {
   sky: 0x10151b,
@@ -130,6 +134,8 @@ export class GameView {
   private readonly props: Props;
   private readonly effects: Effects;
   private time = 0;
+  /** Cuánto se ha cerrado la niebla por La Jauría, de 0 a 1. */
+  private packFog = 0;
   /** Balanceo de cámara al moverse y golpe al aterrizar (aspecto, no balance). */
   private bobPhase = 0;
   private bobAmount = 0;
@@ -137,7 +143,7 @@ export class GameView {
 
   constructor(map: MapConfig, poolSize: number) {
     this.scene.background = new THREE.Color(COLORS.sky);
-    this.scene.fog = new THREE.Fog(COLORS.sky, 6, 30);
+    this.scene.fog = new THREE.Fog(COLORS.sky, 6, FOG_FAR);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
 
@@ -287,6 +293,14 @@ export class GameView {
       lerp(p.prevPos.z, p.pos.z),
     );
     this.camera.rotation.set(pitch - this.landKick * 0.6, yaw, roll);
+
+    // Durante La Jauría la niebla se cierra y se vuelve rojiza: se ve venir menos.
+    const fog = this.scene.fog as THREE.Fog;
+    const pack = game.round.special && game.round.phase === 'active' ? 1 : 0;
+    this.packFog += (pack - this.packFog) * Math.min(1, frameSeconds * 0.8);
+    fog.far = FOG_FAR + (PACK_FOG_FAR - FOG_FAR) * this.packFog;
+    fog.color.setHex(COLORS.sky).lerp(PACK_FOG_COLOR, this.packFog);
+    (this.scene.background as THREE.Color).copy(fog.color);
 
     this.enemyViews.update(game, alpha, frameSeconds);
 

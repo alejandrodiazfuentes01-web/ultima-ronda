@@ -1,0 +1,16 @@
+{
+  "firstRound": 5,
+  "intervalMin": 5,
+  "intervalMax": 7,
+  "countBase": 2,
+  "countPerRound": 1,
+  "maxCount": 24,
+  "healthFraction": 0.3,
+  "speed": 6,
+  "speedVariation": 0.06,
+  "hitDamage": 30,
+  "attackIntervalSeconds": 0.8,
+  "vaultSeconds": 0.5,
+  "spawnSeconds": 1.1,
+  "aliveCap": 8
+}

@@ -1,7 +1,10 @@
 /**
- * Los Vacíos en pantalla: una reserva fija de personajes animados (regla 5),
- * creada al arrancar. Cada uno elige su animación según lo que hace en la
- * simulación. Si el modelo no carga, se dibujan cápsulas grises.
+ * Los Vacíos y La Jauría en pantalla: dos reservas fijas de personajes animados
+ * (regla 5), creadas al arrancar; cada hueco de la simulación tiene uno de cada
+ * y se enseña el de su tipo. Cada uno elige su animación según lo que hace en la
+ * simulación. Si el modelo de los Vacíos no carga, se dibujan cápsulas grises.
+ *
+ * La Jauría son lobos de ceniza: el modelo de lobo, oscurecido, con brasas en los ojos.
  */
 import * as THREE from 'three/webgpu';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
@@ -10,6 +13,15 @@ import type { SimEvent } from '../../shared/sim/types';
 import { getModel } from './models';
 
 export const ENEMY_MODEL = 'vacio';
+export const PACK_MODEL = 'jauria';
+
+/** Color de ceniza del lobo y de sus ojos (aspecto, no balance). */
+const PACK_TINT = 0x2f2d2c;
+const PACK_EMBER = 0x0d0402;
+const EYE_COLOR = 0xff7a1a;
+/** Velocidad a la que se ven naturales los pasos del lobo, al andar y al correr. */
+const PACK_WALK_SPEED = 1.6;
+const PACK_RUN_SPEED = 5.5;
 
 type Clip = 'andar' | 'correr' | 'esprintar' | 'atacar' | 'impacto' | 'trepar';
 
@@ -28,11 +40,23 @@ interface Unit {
   hitTimer: number;
 }
 
+type PackClip = 'Idle' | 'Walk' | 'Run';
+
+interface PackUnit {
+  root: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  actions: Map<PackClip, THREE.AnimationAction>;
+  current: PackClip | null;
+  hitTimer: number;
+}
+
 export class EnemyViews {
   private readonly units: Unit[] = [];
+  private readonly pack: PackUnit[] = [];
   private readonly fallback: THREE.InstancedMesh | null = null;
 
   constructor(scene: THREE.Scene, poolSize: number) {
+    this.buildPack(scene, poolSize);
     const model = getModel(ENEMY_MODEL);
     if (!model) {
       const geo = new THREE.CapsuleGeometry(0.28, 0.95, 4, 10);
@@ -75,17 +99,97 @@ export class EnemyViews {
     }
   }
 
+  /** Reserva de lobos de La Jauría, uno por hueco. */
+  private buildPack(scene: THREE.Scene, poolSize: number): void {
+    const model = getModel(PACK_MODEL);
+    if (!model) return;
+    const mats = new Map<THREE.Material, THREE.Material>();
+    const eyeGeo = new THREE.SphereGeometry(0.026, 6, 4);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: EYE_COLOR });
+    for (let i = 0; i < poolSize; i++) {
+      const root = cloneSkinned(model.scene);
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.frustumCulled = false;
+        const src = mesh.material as THREE.MeshStandardMaterial;
+        let mat = mats.get(src);
+        if (!mat) {
+          const m = src.clone();
+          m.color.setHex(PACK_TINT);
+          m.emissive.setHex(PACK_EMBER);
+          m.roughness = 1;
+          mat = m;
+          mats.set(src, mat);
+        }
+        mesh.material = mat;
+      });
+      // Brasas en los ojos, pegadas al hueso de la cabeza.
+      const head = root.getObjectByName('Head');
+      if (head) {
+        for (const side of [-1, 1]) {
+          const eye = new THREE.Mesh(eyeGeo, eyeMat);
+          eye.position.set(side * 0.045, 0.02, 0.1);
+          head.add(eye);
+        }
+      }
+      root.visible = false;
+      scene.add(root);
+      const mixer = new THREE.AnimationMixer(root);
+      const actions = new Map<PackClip, THREE.AnimationAction>();
+      for (const clip of model.animations) actions.set(clip.name as PackClip, mixer.clipAction(clip));
+      this.pack.push({ root, mixer, actions, current: null, hitTimer: 0 });
+    }
+  }
+
   onEvent(ev: SimEvent): void {
     if (ev.type === 'hit' && !ev.killed) {
       const u = this.units[ev.enemy];
       if (u) u.hitTimer = HIT_SECONDS;
+      const w = this.pack[ev.enemy];
+      if (w) w.hitTimer = HIT_SECONDS;
     } else if (ev.type === 'enemySpawned') {
       const u = this.units[ev.enemy];
       if (u) {
         u.mixer.stopAllAction();
         u.current = null;
       }
+      const w = this.pack[ev.enemy];
+      if (w) {
+        w.mixer.stopAllAction();
+        w.current = null;
+      }
     }
+  }
+
+  /** Un lobo de La Jauría: corre, anda o espera, y se encoge un instante al recibir un impacto. */
+  private updateWolf(w: PackUnit, e: EnemyState, game: Game, alpha: number, dt: number): void {
+    const lerp = (a: number, b: number) => a + (b - a) * alpha;
+    w.root.visible = true;
+    w.root.position.set(lerp(e.prevPos.x, e.pos.x), lerp(e.prevPos.y, e.pos.y), lerp(e.prevPos.z, e.pos.z));
+    w.root.rotation.y = e.yaw + Math.PI;
+    const moved = Math.hypot(e.pos.x - e.prevPos.x, e.pos.z - e.prevPos.z) * 60;
+    const p = game.player.pos;
+    const biting = Math.hypot(p.x - e.pos.x, p.z - e.pos.z) <= game.cfg.enemies.attackRange;
+    const clip: PackClip = e.phase === 'climbing' || biting || moved > 2.5 ? 'Run' : moved > 0.3 ? 'Walk' : 'Idle';
+    const action = w.actions.get(clip);
+    if (action && w.current !== clip) {
+      const prev = w.current ? w.actions.get(w.current) : null;
+      action.reset().play();
+      if (prev) action.crossFadeFrom(prev, FADE, false);
+      w.current = clip;
+    }
+    if (action) {
+      if (clip === 'Run') action.timeScale = biting ? 1.6 : Math.max(0.7, moved / PACK_RUN_SPEED);
+      else if (clip === 'Walk') action.timeScale = Math.max(0.5, moved / PACK_WALK_SPEED);
+    }
+    // Al morder, se lanza un poco hacia delante; al recibir un impacto, se agacha.
+    w.hitTimer = Math.max(0, w.hitTimer - dt);
+    const lunge = biting ? Math.max(0, Math.sin(game.tick * 0.35)) * 0.12 : 0;
+    w.root.position.x += -Math.sin(e.yaw) * lunge;
+    w.root.position.z += -Math.cos(e.yaw) * lunge;
+    w.root.position.y -= (w.hitTimer / HIT_SECONDS) * 0.08;
+    w.mixer.update(dt);
   }
 
   private choose(e: EnemyState, game: Game): Clip {
@@ -124,9 +228,14 @@ export class EnemyViews {
       return;
     }
     for (const e of game.enemies) {
+      const w = this.pack[e.index];
+      if (w) {
+        if (e.phase !== 'inactive' && e.kind === 'jauria') this.updateWolf(w, e, game, alpha, dt);
+        else w.root.visible = false;
+      }
       const u = this.units[e.index];
       if (!u) continue;
-      if (e.phase === 'inactive') {
+      if (e.phase === 'inactive' || (e.kind === 'jauria' && w)) {
         u.root.visible = false;
         continue;
       }

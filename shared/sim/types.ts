@@ -61,7 +61,7 @@ export type SimEvent =
   | { type: 'impact'; at: Vec3; normal: Vec3 | null; surface: 'world' | 'enemy' }
   | { type: 'purchase'; what: 'weapon' | 'ammo' | 'door' | 'perk' | 'contenedor' | 'forja'; id: string }
   | { type: 'denied'; cost: number }
-  | { type: 'roundStart'; round: number }
+  | { type: 'roundStart'; round: number; special: boolean }
   | { type: 'roundEnd'; round: number }
   | { type: 'playerHit'; health: number; enemy: number }
   | { type: 'plankTorn'; window: number }

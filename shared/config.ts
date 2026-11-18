@@ -13,6 +13,7 @@ import rawContenedor from './data/contenedor.json';
 import rawForja from './data/forja.json';
 import rawPowerups from './data/powerups.json';
 import rawHandling from './data/handling.json';
+import rawJauria from './data/jauria.json';
 import { DataError, arr, bool, num, nums, obj, str, type Obj } from './data/validate';
 import { ROUNDS, type RoundsConfig } from './rounds';
 
@@ -463,6 +464,10 @@ export interface PerkConfig {
   healthMultiplier: number;
   selfRevivesPerGame: number;
   selfReviveSeconds: number;
+  /** Multiplica el tiempo de recarga (Pulso: 0,5). */
+  reloadMultiplier: number;
+  /** Multiplica la cadencia de disparo (Doble filo). */
+  fireRateMultiplier: number;
 }
 
 export interface PerksConfig {
@@ -488,6 +493,8 @@ export function parsePerks(raw: unknown, weapons: Record<string, WeaponConfig>):
       healthMultiplier: 'healthMultiplier' in x ? num(x, 'healthMultiplier', pw) : 1,
       selfRevivesPerGame: 'selfRevivesPerGame' in x ? num(x, 'selfRevivesPerGame', pw, { int: true, allowZero: true }) : 0,
       selfReviveSeconds: 'selfReviveSeconds' in x ? num(x, 'selfReviveSeconds', pw) : 0,
+      reloadMultiplier: 'reloadMultiplier' in x ? num(x, 'reloadMultiplier', pw, { max: 1 }) : 1,
+      fireRateMultiplier: 'fireRateMultiplier' in x ? num(x, 'fireRateMultiplier', pw, { min: 1, max: 3 }) : 1,
     };
   }
   return {
@@ -563,6 +570,59 @@ export function parseForja(raw: unknown): ForjaConfig {
   };
 }
 
+// ---------- La Jauría (ronda especial) ----------
+
+/** Ronda especial: solo salen enemigos rápidos y frágiles, que saltan las ventanas sin arrancar planchas. */
+export interface JauriaConfig {
+  /** Primera ronda especial y cada cuántas rondas vuelve (al azar entre el mínimo y el máximo). */
+  firstRound: number;
+  intervalMin: number;
+  intervalMax: number;
+  /** Cuántos salen: base + por ronda × ronda, con tope. */
+  countBase: number;
+  countPerRound: number;
+  maxCount: number;
+  /** Vida: esta fracción de la de un Vacío de la misma ronda. */
+  healthFraction: number;
+  speed: number;
+  /** Cada uno va hasta este tanto por uno más lento (nunca más rápido). */
+  speedVariation: number;
+  hitDamage: number;
+  attackIntervalSeconds: number;
+  /** Segundos que tarda en saltar por la ventana. */
+  vaultSeconds: number;
+  spawnSeconds: number;
+  aliveCap: number;
+}
+
+export function parseJauria(raw: unknown): JauriaConfig {
+  const w = 'jauria.json';
+  const o = obj(raw, w);
+  const int = { int: true, min: 1 };
+  const intervalMin = num(o, 'intervalMin', w, int);
+  return {
+    firstRound: num(o, 'firstRound', w, int),
+    intervalMin,
+    intervalMax: num(o, 'intervalMax', w, { int: true, min: intervalMin }),
+    countBase: num(o, 'countBase', w, { allowZero: true }),
+    countPerRound: num(o, 'countPerRound', w, { allowZero: true }),
+    maxCount: num(o, 'maxCount', w, int),
+    healthFraction: num(o, 'healthFraction', w, { max: 2 }),
+    speed: num(o, 'speed', w),
+    speedVariation: num(o, 'speedVariation', w, { allowZero: true, max: 0.9 }),
+    hitDamage: num(o, 'hitDamage', w),
+    attackIntervalSeconds: num(o, 'attackIntervalSeconds', w),
+    vaultSeconds: num(o, 'vaultSeconds', w),
+    spawnSeconds: num(o, 'spawnSeconds', w),
+    aliveCap: num(o, 'aliveCap', w, int),
+  };
+}
+
+/** Enemigos de una ronda especial. */
+export function jauriaCount(round: number, cfg: JauriaConfig): number {
+  return Math.min(cfg.maxCount, Math.max(1, Math.round(cfg.countBase + cfg.countPerRound * round)));
+}
+
 // ---------- Power-ups ----------
 
 export const POWERUP_KINDS = ['municionCompleta', 'bajaInstantanea', 'puntosDobles', 'ondaExpansiva'] as const;
@@ -610,6 +670,7 @@ export interface GameConfig {
   contenedor: ContenedorConfig;
   forja: ForjaConfig;
   powerups: PowerupsConfig;
+  jauria: JauriaConfig;
 }
 
 /** Mapas disponibles. «amplio» es una variante de prueba con más espacio libre (?mapa=amplio). */
@@ -638,6 +699,7 @@ export function loadConfig(mapName: MapName = 'prototipo'): GameConfig {
     contenedor: parseContenedor(rawContenedor, weapons),
     forja: parseForja(rawForja),
     powerups: parsePowerups(rawPowerups),
+    jauria: parseJauria(rawJauria),
   };
 }
 

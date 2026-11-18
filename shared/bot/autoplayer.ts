@@ -16,6 +16,7 @@ import { emptyInput, type PlayerInput } from '../sim/types';
 /** Puesto del jugador automático: delante de la puerta, para ver entrar a los del laboratorio. */
 const POST_BEFORE_DOOR = 1.7;
 const HEAD_HEIGHT = 1.6;
+const JAURIA_BODY_HEIGHT = 0.62;
 
 /** Límites de la vigilancia. */
 const MAX_ROUND_SECONDS = 15 * 60;
@@ -27,6 +28,10 @@ export interface BotReport {
   roundsCompleted: number;
   simSeconds: number;
   kills: number;
+  /** Enemigos que han salido en toda la partida (deben ser los mismos que las bajas). */
+  spawned: number;
+  /** Rondas de La Jauría jugadas. */
+  specialRounds: number;
   doorOpened: boolean;
   problems: string[];
 }
@@ -43,6 +48,8 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
   const watch = game.enemies.map(() => ({ since: 0, x: 0, z: 0 }));
   let roundStartTick = 0;
   let roundsCompleted = 0;
+  let spawned = 0;
+  let specialRounds = 0;
   let fireToggle = false;
   const [ax, az] = cfg.map.doors[0]!.anchors[0]!;
   const post = { x: ax - POST_BEFORE_DOOR, z: az };
@@ -57,8 +64,12 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
 
       for (const ev of game.events) {
         if (ev.type === 'roundEnd') roundsCompleted = ev.round;
-        if (ev.type === 'roundStart') roundStartTick = game.tick;
+        if (ev.type === 'roundStart') {
+          roundStartTick = game.tick;
+          if (ev.special) specialRounds++;
+        }
         if (ev.type === 'enemySpawned') {
+          spawned++;
           const e = game.enemies[ev.enemy]!;
           watch[ev.enemy] = { since: game.tick, x: e.pos.x, z: e.pos.z };
         }
@@ -92,7 +103,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
     if (roundsCompleted < opts.rounds && problems.length === 0) {
       problems.push(`Solo se completaron ${roundsCompleted} de ${opts.rounds} rondas`);
     }
-    return { roundsCompleted, simSeconds: game.tick * SIM_DT, kills: game.round.kills, doorOpened: game.doors[0]!.open, problems };
+    return { roundsCompleted, simSeconds: game.tick * SIM_DT, kills: game.round.kills, spawned, specialRounds, doorOpened: game.doors[0]!.open, problems };
   } finally {
     game.free();
   }
@@ -134,7 +145,9 @@ function decide(game: Game, fireToggle: boolean, post: { x: number; z: number })
   const dx = e.pos.x - p.pos.x;
   const dz = e.pos.z - p.pos.z;
   input.yaw = Math.atan2(-dx, -dz);
-  input.pitch = Math.atan2(e.pos.y + HEAD_HEIGHT - (p.pos.y + EYE_HEIGHT), Math.hypot(dx, dz));
+  // A La Jauría, al cuerpo: va baja y su cabeza queda por delante.
+  const aimHeight = e.kind === 'jauria' ? JAURIA_BODY_HEIGHT : HEAD_HEIGHT;
+  input.pitch = Math.atan2(e.pos.y + aimHeight - (p.pos.y + EYE_HEIGHT), Math.hypot(dx, dz));
   // Con la mira subida, para que la dispersión de cadera no le haga fallar a distancia.
   input.aim = true;
 

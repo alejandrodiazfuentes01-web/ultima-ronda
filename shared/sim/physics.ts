@@ -36,12 +36,25 @@ const KCC_OFFSET = 0.02;
 /** Altura del centro de la cápsula sobre los pies. */
 const CAPSULE_CENTER = PLAYER_HEIGHT / 2 + KCC_OFFSET;
 
-/** Partes de impacto del enemigo: altura del centro, forma y tamaño. */
-const ENEMY_PARTS: Array<{ part: HitPart; y: number; halfHeight: number; radius: number }> = [
-  { part: 'head', y: 1.6, halfHeight: 0, radius: 0.16 },
-  { part: 'torso', y: 1.15, halfHeight: 0.22, radius: 0.26 },
-  { part: 'limb', y: 0.45, halfHeight: 0.25, radius: 0.22 },
-];
+export type EnemyKind = 'vacio' | 'jauria';
+
+/**
+ * Partes de impacto de cada tipo de enemigo: centro (con el enemigo mirando a -z),
+ * forma y tamaño. Una cápsula tumbada va a lo largo del cuerpo (z).
+ */
+const ENEMY_PARTS: Record<EnemyKind, Array<{ part: HitPart; at: [number, number, number]; halfHeight: number; radius: number; lying?: boolean }>> = {
+  vacio: [
+    { part: 'head', at: [0, 1.6, 0], halfHeight: 0, radius: 0.16 },
+    { part: 'torso', at: [0, 1.15, 0], halfHeight: 0.22, radius: 0.26 },
+    { part: 'limb', at: [0, 0.45, 0], halfHeight: 0.25, radius: 0.22 },
+  ],
+  jauria: [
+    { part: 'head', at: [0, 0.78, -0.58], halfHeight: 0, radius: 0.17 },
+    { part: 'torso', at: [0, 0.62, 0], halfHeight: 0.32, radius: 0.21, lying: true },
+    { part: 'limb', at: [0, 0.25, 0], halfHeight: 0.38, radius: 0.18, lying: true },
+  ],
+};
+const LYING = { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 };
 
 /** Objetos sólidos del mapa con los que se interactúa: interruptor, estaciones, Forja, huecos del Contenedor. */
 export function fixtures(map: MapConfig): Fixture[] {
@@ -80,6 +93,9 @@ export class Physics {
   private readonly playerCollider: Collider;
   private readonly doorColliders: Collider[] = [];
   private readonly enemyBodies: RigidBody[] = [];
+  /** Colisionadores de cada enemigo, por tipo: solo los de su tipo están encendidos. */
+  private readonly enemyColliders: Array<Record<EnemyKind, Collider[]>> = [];
+  private readonly enemyKinds: EnemyKind[] = [];
   /** Asocia cada colisionador de enemigo con su enemigo y su parte. */
   private readonly enemyParts = new Map<number, { enemy: number; part: HitPart }>();
   private grounded = false;
@@ -116,12 +132,21 @@ export class Physics {
       const body = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -50, 0).setEnabled(false),
       );
-      for (const p of ENEMY_PARTS) {
-        const desc =
-          p.halfHeight > 0 ? RAPIER.ColliderDesc.capsule(p.halfHeight, p.radius) : RAPIER.ColliderDesc.ball(p.radius);
-        const c = this.world.createCollider(desc.setTranslation(0, p.y, 0).setCollisionGroups(G_ENEMY), body);
-        this.enemyParts.set(c.handle, { enemy: i, part: p.part });
+      const sets = { vacio: [] as Collider[], jauria: [] as Collider[] };
+      for (const kind of ['vacio', 'jauria'] as const) {
+        for (const p of ENEMY_PARTS[kind]) {
+          const desc =
+            p.halfHeight > 0 ? RAPIER.ColliderDesc.capsule(p.halfHeight, p.radius) : RAPIER.ColliderDesc.ball(p.radius);
+          desc.setTranslation(p.at[0], p.at[1], p.at[2]).setCollisionGroups(G_ENEMY);
+          if (p.lying) desc.setRotation(LYING);
+          const c = this.world.createCollider(desc, body);
+          c.setEnabled(kind === 'vacio');
+          this.enemyParts.set(c.handle, { enemy: i, part: p.part });
+          sets[kind].push(c);
+        }
       }
+      this.enemyColliders.push(sets);
+      this.enemyKinds.push('vacio');
       this.enemyBodies.push(body);
     }
     this.world.step();
@@ -147,13 +172,25 @@ export class Physics {
     return this.grounded;
   }
 
-  setEnemy(index: number, active: boolean, pos?: Vec3): void {
+  /** Coloca un enemigo. `yaw` lo gira (importa en los alargados, como La Jauría). */
+  setEnemy(index: number, active: boolean, pos?: Vec3, yaw = 0): void {
     const body = this.enemyBodies[index]!;
     if (body.isEnabled() !== active) {
       body.setEnabled(active);
       if (active && pos) body.setTranslation(pos, true);
     }
-    if (active && pos) body.setNextKinematicTranslation(pos);
+    if (active && pos) {
+      body.setNextKinematicTranslation(pos);
+      body.setNextKinematicRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) });
+    }
+  }
+
+  /** Cambia las partes de impacto de un enemigo al tipo dado. */
+  setEnemyKind(index: number, kind: EnemyKind): void {
+    if (this.enemyKinds[index] === kind) return;
+    this.enemyKinds[index] = kind;
+    const sets = this.enemyColliders[index]!;
+    for (const k of ['vacio', 'jauria'] as const) for (const c of sets[k]) c.setEnabled(k === kind);
   }
 
   openDoor(index: number): void {

@@ -4,11 +4,11 @@
  * y el futuro servidor la leen igual.
  */
 import type { CrowdAgent } from '@recast-navigation/core';
-import { enemySpeed, type GameConfig, type PowerupKind, type WeaponConfig } from '../config';
+import { enemySpeed, jauriaCount, type GameConfig, type PowerupKind, type WeaponConfig } from '../config';
 import { aliveCap, enemyCount, enemyHealth, spawnInterval } from '../rounds';
 import { SIM_DT } from './fixedStep';
 import { Navigation } from './nav';
-import { EYE_HEIGHT, PLAYER_RADIUS, Physics } from './physics';
+import { EYE_HEIGHT, PLAYER_RADIUS, Physics, type EnemyKind } from './physics';
 import { Rng } from './rng';
 import type { HitPart, PlayerInput, Prompt, SimEvent, SimOptions, Vec3 } from './types';
 
@@ -22,13 +22,17 @@ const CONTACT_DISTANCE = 0.7;
 const RETARGET_TICKS = 10;
 /** Huecos para power-ups en el suelo a la vez. */
 const PICKUP_POOL = 8;
-/** Altura del pecho de un Vacío, para dibujar el arco del Arco voltaico. */
-const CHEST_HEIGHT = 1.2;
+/** Altura del pecho de cada tipo de enemigo, para dibujar el arco del Arco voltaico. */
+const CHEST_HEIGHT: Record<EnemyKind, number> = { vacio: 1.2, jauria: 0.62 };
+/** Altura del salto por la ventana respecto al alféizar (La Jauría salta por encima de las planchas). */
+const VAULT_LIFT = 1.25;
 
 export type EnemyPhase = 'inactive' | 'approaching' | 'tearing' | 'climbing' | 'chasing';
 
 export interface EnemyState {
   readonly index: number;
+  /** Vacío normal o miembro de La Jauría (ronda especial). */
+  kind: EnemyKind;
   phase: EnemyPhase;
   health: number;
   pos: Vec3;
@@ -116,6 +120,8 @@ export interface RoundState {
   repairPoints: number;
   kills: number;
   powerupsDropped: number;
+  /** Ronda especial de La Jauría. */
+  special: boolean;
 }
 
 export interface ContenedorState {
@@ -161,6 +167,8 @@ export class Game {
   power = false;
   prompt: Prompt | null = null;
   tick = 0;
+  /** Ronda en la que toca la siguiente ronda de La Jauría. */
+  nextSpecial: number;
 
   private readonly rng: Rng;
   /** Azar de la dispersión, aparte del de la partida: disparar no cambia qué power-up cae ni dónde. */
@@ -234,6 +242,7 @@ export class Game {
     for (let i = 0; i < pool; i++) {
       this.enemies.push({
         index: i,
+        kind: 'vacio',
         phase: 'inactive',
         health: 0,
         pos: { x: 0, y: -50, z: 0 },
@@ -255,7 +264,8 @@ export class Game {
 
     this.contenedor = { spot: 0, phase: 'idle', timer: 0, weapon: null, uses: 0, movesAfter: this.rollMovesAfter() };
 
-    this.round = { number: 0, phase: 'waiting', toSpawn: 0, alive: 0, spawnTimer: 0, breakTimer: 0, repairPoints: 0, kills: 0, powerupsDropped: 0 };
+    this.round = { number: 0, phase: 'waiting', toSpawn: 0, alive: 0, spawnTimer: 0, breakTimer: 0, repairPoints: 0, kills: 0, powerupsDropped: 0, special: false };
+    this.nextSpecial = cfg.jauria.firstRound;
     if (this.opts.autoRounds) this.startRound(Math.max(1, Math.floor(this.opts.startRound)));
   }
 
@@ -325,6 +335,18 @@ export class Game {
   activeSlot(): WeaponSlot | null {
     const p = this.player;
     return p.downed ? p.downedSlot : (p.slots[p.current] ?? null);
+  }
+
+  /** Producto de un efecto de todos los sueros activos. */
+  private perkFactor(key: 'reloadMultiplier' | 'fireRateMultiplier'): number {
+    let f = 1;
+    for (const id of this.player.perks) f *= this.cfg.perks.perks[id]?.[key] ?? 1;
+    return f;
+  }
+
+  /** Segundos de recarga del arma (o de cada cartucho) con los sueros activos: Pulso la acorta. */
+  reloadSecondsOf(w: WeaponConfig): number {
+    return w.reloadSeconds * this.perkFactor('reloadMultiplier');
   }
 
   /** Vida máxima con los sueros activos. */
@@ -532,7 +554,7 @@ export class Game {
             slot.reserve--;
             const more = slot.mag < this.magazineOf(slot) && slot.reserve > 0;
             this.events.push({ type: 'shellLoaded', weapon: w.id, last: !more });
-            if (more) p.reloadTimer = w.reloadSeconds;
+            if (more) p.reloadTimer = this.reloadSecondsOf(w);
           } else {
             const take = Math.min(this.magazineOf(slot) - slot.mag, slot.reserve);
             slot.mag += take;
@@ -555,11 +577,13 @@ export class Game {
       return;
     }
     slot.mag--;
-    let wait = 60 / w.rpm;
+    // Doble filo acelera la cadencia, también la de las ráfagas.
+    const rate = this.perkFactor('fireRateMultiplier');
+    let wait = 60 / w.rpm / rate;
     if (w.fireMode === 'burst') {
       p.burstLeft = (p.burstLeft > 0 ? p.burstLeft : w.burstCount) - 1;
       if (slot.mag <= 0) p.burstLeft = 0;
-      if (p.burstLeft === 0) wait = w.burstDelaySeconds;
+      if (p.burstLeft === 0) wait = w.burstDelaySeconds / rate;
     }
     p.fireCooldown = Math.max(p.fireCooldown, -SIM_DT) + wait;
     this.events.push({ type: 'shot', weapon: w.id, upgraded: slot.upgraded });
@@ -614,7 +638,7 @@ export class Game {
         if (!hit.part) continue;
         const mult = hit.part === 'head' ? this.cfg.player.headMultiplier : hit.part === 'limb' ? this.cfg.player.limbMultiplier : 1;
         const first = this.enemies[hit.enemy]!;
-        const from = { x: first.pos.x, y: first.pos.y + CHEST_HEIGHT, z: first.pos.z };
+        const from = { x: first.pos.x, y: first.pos.y + CHEST_HEIGHT[first.kind], z: first.pos.z };
         this.events.push({ type: 'impact', at: at(hit.distance, dir), normal: null, surface: 'enemy' });
         this.damageEnemy(hit.enemy, damage * mult, hit.part, upgraded);
         if (w.chain) this.chainFrom(hit.enemy, from, damage, w.chain.targets - 1, w.chain.range, upgraded);
@@ -643,7 +667,7 @@ export class Game {
       }
       if (best < 0) return;
       const e = this.enemies[best]!;
-      const to = { x: e.pos.x, y: e.pos.y + CHEST_HEIGHT, z: e.pos.z };
+      const to = { x: e.pos.x, y: e.pos.y + CHEST_HEIGHT[e.kind], z: e.pos.z };
       this.events.push({ type: 'chain', from, to });
       hit.add(best);
       this.damageEnemy(best, damage, 'torso', upgraded);
@@ -654,7 +678,7 @@ export class Game {
   private startReload(slot: WeaponSlot, w: WeaponConfig): void {
     const p = this.player;
     if (p.reloadTimer > 0 || slot.mag >= this.magazineOf(slot) || slot.reserve <= 0) return;
-    p.reloadTimer = w.reloadSeconds;
+    p.reloadTimer = this.reloadSecondsOf(w);
     this.events.push({ type: 'reloadStart', weapon: w.id });
   }
 
@@ -888,7 +912,9 @@ export class Game {
   private hurtPlayer(enemy: number): void {
     const p = this.player;
     if (!p.alive || p.downed || p.protectTimer > 0 || this.opts.invulnerable) return;
-    p.health = Math.max(0, p.health - this.cfg.enemies.hitDamage);
+    const e = this.enemies[enemy];
+    const damage = e?.kind === 'jauria' ? this.cfg.jauria.hitDamage : this.cfg.enemies.hitDamage;
+    p.health = Math.max(0, p.health - damage);
     p.sinceDamage = 0;
     this.events.push({ type: 'playerHit', health: p.health, enemy });
     if (p.health > 0) return;
@@ -1020,7 +1046,7 @@ export class Game {
 
   private maybeDropPowerup(at: Vec3): void {
     const pc = this.cfg.powerups;
-    if (this.round.powerupsDropped >= pc.maxPerRound || pc.kinds.length === 0) return;
+    if (this.round.special || this.round.powerupsDropped >= pc.maxPerRound || pc.kinds.length === 0) return;
     if (this.rng.next() >= pc.dropChance) return;
     this.dropPowerup(pc.kinds[this.rng.int(pc.kinds.length)]!, at.x, at.z);
   }
@@ -1096,13 +1122,18 @@ export class Game {
 
   startRound(n: number): void {
     const r = this.round;
+    const jc = this.cfg.jauria;
+    // Si la partida empieza más adelante (herramienta de prueba), la siguiente especial se busca desde ahí.
+    while (this.nextSpecial < n) this.nextSpecial += jc.intervalMin + this.rng.int(jc.intervalMax - jc.intervalMin + 1);
     r.number = n;
     r.phase = 'active';
-    r.toSpawn = enemyCount(n, this.cfg.rounds);
+    r.special = n === this.nextSpecial;
+    if (r.special) this.nextSpecial += jc.intervalMin + this.rng.int(jc.intervalMax - jc.intervalMin + 1);
+    r.toSpawn = r.special ? jauriaCount(n, jc) : enemyCount(n, this.cfg.rounds);
     r.spawnTimer = 0;
     r.repairPoints = 0;
     r.powerupsDropped = 0;
-    this.events.push({ type: 'roundStart', round: n });
+    this.events.push({ type: 'roundStart', round: n, special: r.special });
   }
 
   private updateRounds(): void {
@@ -1115,10 +1146,11 @@ export class Game {
     if (r.phase !== 'active') return;
     if (r.toSpawn > 0) {
       r.spawnTimer -= SIM_DT;
-      if (r.spawnTimer <= 0 && r.alive < aliveCap(1, this.cfg.rounds)) {
+      const cap = r.special ? this.cfg.jauria.aliveCap : aliveCap(1, this.cfg.rounds);
+      if (r.spawnTimer <= 0 && r.alive < cap) {
         if (this.spawnEnemy()) {
           r.toSpawn--;
-          r.spawnTimer = spawnInterval(r.number, this.cfg.rounds);
+          r.spawnTimer = r.special ? this.cfg.jauria.spawnSeconds : spawnInterval(r.number, this.cfg.rounds);
         }
       }
     } else if (r.alive === 0) {
@@ -1144,12 +1176,19 @@ export class Game {
     }
     const w = this.cfg.map.windows[wi]!;
     const round = Math.max(1, this.round.number);
+    const jc = this.cfg.jauria;
+    e.kind = this.round.special ? 'jauria' : 'vacio';
     e.phase = 'approaching';
     e.window = wi;
-    e.health = enemyHealth(round, this.cfg.rounds);
     // Cada Vacío es un poco distinto: así la horda no avanza en bloque ni en fila.
     const hd = this.cfg.enemies.horde;
-    e.speed = enemySpeed(round, this.cfg.enemies) * (1 - this.rng.next() * hd.speedVariation);
+    if (e.kind === 'jauria') {
+      e.health = enemyHealth(round, this.cfg.rounds) * jc.healthFraction;
+      e.speed = jc.speed * (1 - this.rng.next() * jc.speedVariation);
+    } else {
+      e.health = enemyHealth(round, this.cfg.rounds);
+      e.speed = enemySpeed(round, this.cfg.enemies) * (1 - this.rng.next() * hd.speedVariation);
+    }
     e.lead = this.rng.next() * hd.leadSecondsMax;
     e.sway = this.rng.next() * hd.swayMeters;
     e.swayFreq = 0.3 + this.rng.next() * 0.5;
@@ -1157,10 +1196,11 @@ export class Game {
     e.pos = { x: w.spawn[0], y: 0, z: w.spawn[1] };
     e.prevPos = { ...e.pos };
     e.timer = 0;
-    e.attackTimer = this.cfg.enemies.attackIntervalSeconds * 0.5;
+    e.attackTimer = this.attackInterval(e) * 0.5;
     e.spawnTick = this.tick;
     this.round.alive++;
-    this.physics.setEnemy(e.index, true, e.pos);
+    this.physics.setEnemyKind(e.index, e.kind);
+    this.physics.setEnemy(e.index, true, e.pos, e.yaw);
     this.events.push({ type: 'enemySpawned', enemy: e.index });
     return e;
   }
@@ -1175,6 +1215,11 @@ export class Game {
     e.agent = this.nav.addAgent(e.pos, e.speed, this.cfg.enemies.horde);
     this.physics.setEnemy(e.index, true, e.pos);
     return e;
+  }
+
+  /** Segundos entre golpes de un enemigo. */
+  private attackInterval(e: EnemyState): number {
+    return e.kind === 'jauria' ? this.cfg.jauria.attackIntervalSeconds : this.cfg.enemies.attackIntervalSeconds;
   }
 
   private damageEnemy(i: number, amount: number, part: HitPart | 'melee', upgraded: boolean, fromWave = false): void {
@@ -1197,6 +1242,8 @@ export class Game {
     this.removeEnemy(e);
     this.round.kills++;
     this.maybeDropPowerup(dropAt);
+    // El último de La Jauría deja munición completa.
+    if (this.round.special && this.round.toSpawn === 0 && this.round.alive === 0) this.dropPowerup('municionCompleta', dropAt.x, dropAt.z);
     if (upgraded && !fromWave) this.ashWave(at);
   }
 
@@ -1241,8 +1288,13 @@ export class Game {
         if (d <= stepLen) {
           e.pos.x = w.outside[0];
           e.pos.z = w.outside[1];
-          e.phase = 'tearing';
-          e.timer = ec.plankTearSeconds;
+          if (e.kind === 'jauria') {
+            e.phase = 'climbing';
+            e.timer = this.cfg.jauria.vaultSeconds;
+          } else {
+            e.phase = 'tearing';
+            e.timer = ec.plankTearSeconds;
+          }
         } else {
           e.pos.x += (dx / d) * stepLen;
           e.pos.z += (dz / d) * stepLen;
@@ -1263,10 +1315,11 @@ export class Game {
         }
       } else if (e.phase === 'climbing') {
         e.timer -= SIM_DT;
-        const t = Math.min(1, 1 - e.timer / ec.climbSeconds);
+        const total = e.kind === 'jauria' ? this.cfg.jauria.vaultSeconds : ec.climbSeconds;
+        const t = Math.min(1, 1 - e.timer / total);
         e.pos.x = w.outside[0] + (w.inside[0] - w.outside[0]) * t;
         e.pos.z = w.outside[1] + (w.inside[1] - w.outside[1]) * t;
-        e.pos.y = Math.sin(Math.PI * t) * map.sillHeight;
+        e.pos.y = Math.sin(Math.PI * t) * map.sillHeight * (e.kind === 'jauria' ? VAULT_LIFT : 1);
         if (e.timer <= 0) {
           e.pos.y = 0;
           e.phase = 'chasing';
@@ -1287,12 +1340,12 @@ export class Game {
         e.yaw = Math.atan2(-dx, -dz);
         e.attackTimer -= SIM_DT;
         if (e.attackTimer <= 0) {
-          e.attackTimer = ec.attackIntervalSeconds;
+          e.attackTimer = this.attackInterval(e);
           this.hurtPlayer(e.index);
           if (this.round.phase === 'over') return;
         }
       } else {
-        e.attackTimer = ec.attackIntervalSeconds * 0.5;
+        e.attackTimer = this.attackInterval(e) * 0.5;
       }
     }
 
@@ -1309,7 +1362,7 @@ export class Game {
       }
     }
 
-    for (const e of this.enemies) if (e.phase !== 'inactive') this.physics.setEnemy(e.index, true, e.pos);
+    for (const e of this.enemies) if (e.phase !== 'inactive') this.physics.setEnemy(e.index, true, e.pos, e.yaw);
   }
 
   private faceWindow(e: EnemyState, inside: [number, number]): void {

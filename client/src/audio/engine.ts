@@ -55,7 +55,25 @@ const PERK_TUNE: Record<string, Array<[number, number]>> = {
     [NOTE.B5, 0.2],
     [NOTE.E6, 0.3],
   ],
+  // Pulso: rápido y nervioso, como un latido acelerado.
+  pulso: [
+    [NOTE.C5, 0],
+    [NOTE.C5, 0.07],
+    [NOTE.G5, 0.14],
+    [NOTE.C5, 0.21],
+    [NOTE.E6, 0.28],
+  ],
+  // Doble filo: dos golpes secos que bajan.
+  dobleFilo: [
+    [NOTE.E5, 0],
+    [NOTE.E5, 0.09],
+    [NOTE.B5, 0.24],
+    [NOTE.E4, 0.33],
+  ],
 };
+/** Timbre de la melodía de cada suero. */
+const PERK_WAVE: Record<string, OscillatorType> = { coraza: 'square', segundoAliento: 'sine', pulso: 'triangle', dobleFilo: 'sawtooth' };
+const PERK_GAIN: Record<string, number> = { coraza: 0.08, segundoAliento: 0.15, pulso: 0.14, dobleFilo: 0.06 };
 const DEFAULT_SHOT: ShotSound = { freq: 2000, dur: 0.1, gain: 1.8, thump: 150, room: 0.5 };
 
 /** Volumen de las sirenas de ronda. */
@@ -64,8 +82,9 @@ const SIREN = 0.26;
 /** Margen para programar sonidos, en segundos. */
 const SCHEDULE_AHEAD = 0.03;
 
-/** Altura de la boca de un Vacío, para colocar su voz. */
+/** Altura de la boca de un Vacío y de un lobo de La Jauría, para colocar su voz. */
 const MOUTH_HEIGHT = 1.55;
+const PACK_MOUTH_HEIGHT = 0.75;
 
 type Ctx = AudioContext;
 
@@ -326,6 +345,57 @@ export class AudioEngine {
     osc.stop(t + (rising ? 3.8 : 3.0));
   }
 
+  /** Un aullido: un tono que sube, se sostiene temblando y cae, con algo de aire. */
+  private howl(at: number, pitch: number, gain: number, pan: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(pitch * 0.6, at);
+    osc.frequency.exponentialRampToValueAtTime(pitch, at + 0.45);
+    osc.frequency.setValueAtTime(pitch, at + 1.3);
+    osc.frequency.exponentialRampToValueAtTime(pitch * 0.55, at + 2.1);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.5;
+    const vibDepth = ctx.createGain();
+    vibDepth.gain.value = pitch * 0.025;
+    vib.connect(vibDepth).connect(osc.frequency);
+    const g = this.env(at, 0.35, 1.8, gain);
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan;
+    osc.connect(g).connect(panner).connect(this.sfx);
+    g.connect(this.room);
+    osc.start(at);
+    vib.start(at);
+    osc.stop(at + 2.3);
+    vib.stop(at + 2.3);
+    this.noiseBurst(panner, at, { type: 'bandpass', freq: pitch * 2, q: 3, attack: 0.3, dur: 1.4, gain: gain * 0.15 });
+  }
+
+  /** Empieza La Jauría: tres aullidos desde lados distintos y un golpe grave. */
+  private howls(): void {
+    const t = this.now;
+    this.tone(this.sfx, t, { type: 'sine', freq: 55, freqEnd: 30, attack: 0.05, dur: 1.6, gain: 0.7 });
+    this.noiseBurst(this.room, t, { type: 'lowpass', freq: 600, freqEnd: 120, attack: 0.02, dur: 1.2, gain: 0.5 });
+    this.howl(t + 0.4, 520, 0.22, -0.7);
+    this.howl(t + 1.3, 610, 0.18, 0.75);
+    this.howl(t + 2.0, 470, 0.2, 0);
+  }
+
+  /** Gruñido y jadeo de un lobo de La Jauría: más agudo, corto y rápido que el de un Vacío. */
+  private growl(kind: VoiceKind, pos: Vec3): void {
+    const t = this.now;
+    const out = this.out(pos, 2);
+    if (kind === 'attack') {
+      // Mordisco: chasquido y gruñido corto.
+      this.noiseBurst(out, t, { type: 'bandpass', freq: 2400, q: 2, attack: 0.002, dur: 0.05, gain: 0.6 });
+      this.tone(out, t, { type: 'sawtooth', freq: 240, freqEnd: 160, dur: 0.18, gain: 0.35 });
+      return;
+    }
+    // Jadeo: cuatro resoplidos rápidos, y a veces un gruñido.
+    for (let i = 0; i < 4; i++) this.noiseBurst(out, t + i * 0.14, { type: 'bandpass', freq: 1300, q: 1.5, attack: 0.02, dur: 0.08, gain: 0.35 });
+    if (Math.random() < 0.5) this.tone(out, t + 0.6, { type: 'sawtooth', freq: 180 + Math.random() * 60, freqEnd: 130, attack: 0.05, dur: 0.45, gain: 0.25 });
+  }
+
   /** Gruñido de un Vacío: dientes de sierra grave a través de dos formantes. */
   private voice(kind: VoiceKind, pos: Vec3): void {
     const ctx = this.ctx!;
@@ -391,7 +461,7 @@ export class AudioEngine {
         break;
       case 'reloadStart': {
         const w = game.cfg.weapons[ev.weapon];
-        if (w && w.reloadMode === 'magazine') this.reload(ev.weapon, w.reloadSeconds);
+        if (w && w.reloadMode === 'magazine') this.reload(ev.weapon, game.reloadSecondsOf(w));
         break;
       }
       case 'shellLoaded':
@@ -421,7 +491,7 @@ export class AudioEngine {
         break;
       case 'purchase':
         if (ev.what === 'perk') {
-          this.tune(t, PERK_TUNE[ev.id] ?? PERK_TUNE.coraza!, ev.id === 'coraza' ? 'square' : 'sine', ev.id === 'coraza' ? 0.08 : 0.15);
+          this.tune(t, PERK_TUNE[ev.id] ?? PERK_TUNE.coraza!, PERK_WAVE[ev.id] ?? 'sine', PERK_GAIN[ev.id] ?? 0.12);
           break;
         }
         if (ev.what === 'contenedor') {
@@ -446,8 +516,14 @@ export class AudioEngine {
         this.tone(this.sfx, t + 0.16, { type: 'square', freq: 110, dur: 0.16, gain: 0.12 });
         break;
       case 'roundStart':
-        this.siren(true);
-        this.setMusic(ev.round, true, 3.5);
+        if (ev.special) {
+          // La Jauría: aullidos que se responden por toda la estación y una música más tensa.
+          this.howls();
+          this.setMusic(ev.round + 6, true, 2);
+        } else {
+          this.siren(true);
+          this.setMusic(ev.round, true, 3.5);
+        }
         break;
       case 'roundEnd':
         this.siren(false);
@@ -458,7 +534,8 @@ export class AudioEngine {
         this.tone(this.sfx, t, { type: 'sine', freq: 85, freqEnd: 45, dur: 0.25, gain: 0.7 });
         this.noiseBurst(this.sfx, t, { type: 'lowpass', freq: 700, dur: 0.15, gain: 0.35 });
         const e = game.enemies[ev.enemy];
-        if (e) this.voice('attack', { x: e.pos.x, y: e.pos.y + MOUTH_HEIGHT, z: e.pos.z });
+        if (e && e.kind === 'jauria') this.growl('attack', { x: e.pos.x, y: e.pos.y + PACK_MOUTH_HEIGHT, z: e.pos.z });
+        else if (e) this.voice('attack', { x: e.pos.x, y: e.pos.y + MOUTH_HEIGHT, z: e.pos.z });
         break;
       }
       case 'plankTorn': {
@@ -616,8 +693,14 @@ export class AudioEngine {
       if (now < next) continue;
       const kind = voiceKind(e.pos.x - p.x, e.pos.z - p.z, yaw);
       if (this.limiter.tryStart(now)) {
-        this.voice(kind, { x: e.pos.x, y: e.pos.y + MOUTH_HEIGHT, z: e.pos.z });
-        this.nextVoice[e.index] = nextVoiceTime(now, kind, Math.random);
+        if (e.kind === 'jauria') {
+          this.growl(kind, { x: e.pos.x, y: e.pos.y + PACK_MOUTH_HEIGHT, z: e.pos.z });
+          // Los lobos jadean más a menudo que hablan los Vacíos.
+          this.nextVoice[e.index] = now + (nextVoiceTime(now, kind, Math.random) - now) * 0.5;
+        } else {
+          this.voice(kind, { x: e.pos.x, y: e.pos.y + MOUTH_HEIGHT, z: e.pos.z });
+          this.nextVoice[e.index] = nextVoiceTime(now, kind, Math.random);
+        }
       } else {
         this.nextVoice[e.index] = now + 0.2 + Math.random() * 0.4;
       }

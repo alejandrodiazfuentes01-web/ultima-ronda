@@ -10,7 +10,24 @@ import { placeModel } from './models';
 import { WEAPON_IDS, buildWeapon } from './weapons/build';
 
 /** Color del brillo de cada suero. */
-const PERK_GLOW: Record<string, number> = { coraza: 0xffa040, segundoAliento: 0x4fe0ff };
+const PERK_GLOW: Record<string, number> = { coraza: 0xffa040, segundoAliento: 0x4fe0ff, pulso: 0x7cff6a, dobleFilo: 0xff5a5a };
+/** Sueros cuya estación reutiliza el modelo de otra: se tiñe con su color para distinguirla. */
+const PERK_TINTED = new Set(['pulso', 'dobleFilo']);
+
+/** Tiñe una copia del modelo con un color, sin tocar los materiales compartidos. */
+function tint(model: THREE.Object3D, color: number): THREE.Object3D {
+  const c = new THREE.Color(color);
+  model.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const m = (mesh.material as THREE.MeshStandardMaterial).clone();
+    m.color.lerp(c, 0.45);
+    m.emissive = c.clone();
+    m.emissiveIntensity = 0.12;
+    mesh.material = m;
+  });
+  return model;
+}
 const FALLBACK = 0x6d757e;
 /** Cada cuánto cambia el arma mientras gira El Contenedor. */
 const SPIN_SWAP_SECONDS = 0.12;
@@ -65,7 +82,10 @@ export class Props {
     for (const d of map.decor) scene.add(placeModel(d.model, d.box, d.facing, FALLBACK));
     const ps = map.powerSwitch;
     scene.add(placeModel(ps.model, ps.box, ps.facing, 0x8a8f2a));
-    for (const st of map.perkStations) scene.add(placeModel(st.model, st.box, st.facing, PERK_GLOW[st.perk] ?? FALLBACK));
+    for (const st of map.perkStations) {
+      const m = placeModel(st.model, st.box, st.facing, PERK_GLOW[st.perk] ?? FALLBACK);
+      scene.add(PERK_TINTED.has(st.perk) ? tint(m, PERK_GLOW[st.perk]!) : m);
+    }
     scene.add(placeModel(map.forja.model, map.forja.box, map.forja.facing, 0x5a3a2a));
     for (const spot of map.contenedorSpots) {
       const m = placeModel(spot.model, spot.box, spot.facing, 0x56603a);
