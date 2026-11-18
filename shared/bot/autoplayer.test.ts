@@ -17,10 +17,12 @@ describe('jugador automático', () => {
     );
     expect(report.problems).toEqual([]);
     expect(report.roundsCompleted).toBe(30);
-    // Cada enemigo de las 30 rondas ha salido, ha entrado y ha caído.
-    let expected = 0;
-    for (let r = 1; r <= 30; r++) expected += enemyCount(r);
-    expect(report.kills).toBe(expected);
+    // Cada enemigo de las 30 rondas ha salido, ha entrado y ha caído, también los de La Jauría.
+    expect(report.kills).toBe(report.spawned);
+    expect(report.spawned).toBeGreaterThan(enemyCount(30));
+    // En 30 rondas, La Jauría sale entre 4 y 6 veces (la primera en la 5, luego cada 5 a 7).
+    expect(report.specialRounds).toBeGreaterThanOrEqual(4);
+    expect(report.specialRounds).toBeLessThanOrEqual(6);
     // También ha abierto la puerta, así que han entrado enemigos por el laboratorio.
     expect(report.doorOpened).toBe(true);
   }, 300_000);

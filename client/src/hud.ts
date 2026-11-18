@@ -9,7 +9,7 @@ import { formatNumber, perkName, t, weaponName, type TextKey } from './i18n';
 const FLOAT_POOL = 12;
 
 /** Color de la etiqueta de cada suero. */
-const PERK_COLOR: Record<string, string> = { coraza: '#ffa040', segundoAliento: '#4fe0ff' };
+const PERK_COLOR: Record<string, string> = { coraza: '#ffa040', segundoAliento: '#4fe0ff', pulso: '#7cff6a', dobleFilo: '#ff5a5a' };
 
 /** Texto del aviso de interacción, con su precio. */
 export function promptText(pr: Prompt): string {
@@ -126,6 +126,9 @@ export class Hud {
       case 'powerOn':
         this.showBanner(t('banner.powerOn'));
         break;
+      case 'roundStart':
+        if (ev.special) this.showBanner(t('banner.jauria'));
+        break;
       case 'contenedorMoving':
         this.showBanner(t('banner.contenedorMoving'));
         break;
@@ -227,6 +230,9 @@ export class Hud {
     const roundText =
       r.phase === 'break' ? `${t('hud.round', { round: r.number })} · ${t('hud.break', { seconds: Math.ceil(r.breakTimer) })}` : t('hud.round', { round: Math.max(1, r.number) });
     if (roundText !== this.last.round) this.round.textContent = this.last.round = roundText;
+    // La ronda de La Jauría se marca en rojo.
+    const special = r.special && r.phase === 'active';
+    if (this.round.classList.contains('special') !== special) this.round.classList.toggle('special', special);
 
     if (p.points !== this.last.points) {
       this.points.textContent = formatNumber(p.points);

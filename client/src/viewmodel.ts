@@ -266,7 +266,7 @@ export class Viewmodel {
 
     // Recarga.
     let reloadT = -1;
-    if (p.reloadTimer > 0 && cfg && !p.downed && cfg.reloadMode === 'magazine') reloadT = 1 - p.reloadTimer / cfg.reloadSeconds;
+    if (p.reloadTimer > 0 && cfg && !p.downed && cfg.reloadMode === 'magazine') reloadT = 1 - p.reloadTimer / game.reloadSecondsOf(cfg);
     const shellReload = p.reloadTimer > 0 && cfg?.reloadMode === 'shell';
     const tiltIn = reloadT >= 0 ? span(reloadT, 0, 0.12) * (1 - span(reloadT, 0.86, 1)) : shellReload ? 1 : 0;
     this.shellBump = Math.max(0, this.shellBump - dt * 5);

@@ -55,6 +55,18 @@ body {
 }
 
 /* Punto de mira de cuatro marcas: se abren con la dispersión del arma (--gap) y desaparecen al apuntar. */
+#hud-round.special {
+  border-color: rgba(217, 83, 79, 0.8);
+  color: #ff6a5f;
+  animation: pack-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pack-pulse {
+  50% {
+    box-shadow: 0 0 14px rgba(217, 83, 79, 0.55);
+  }
+}
+
 #hud-crosshair {
   --gap: 8px;
   position: absolute;
@@ -452,6 +464,15 @@ body {
 .overlay button:disabled {
   opacity: 0.6;
   cursor: wait;
+}
+
+.credits {
+  max-width: 560px;
+  margin: 18px auto 0;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+  text-align: center;
 }
 
 .controls h2 {

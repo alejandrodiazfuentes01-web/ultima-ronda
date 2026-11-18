@@ -82,7 +82,7 @@ Ambientación propuesta: la Estación Aurora, una base de investigación de mont
 | Derribo y fin | Al quedarte sin vida caes y te desangras en 45 s. En solitario, un suero permite levantarte solo, tres veces por partida | Baliza de auxilio |
 | Mejora de armas | Por un precio alto, el arma gana daño, cargador y un efecto. Requiere energía | «La Forja», en la torre de radio |
 | Power-ups | Los enemigos sueltan a veces una bonificación de 30 s o inmediata | Munición completa, Baja instantánea, Puntos dobles, Onda expansiva |
-| Ronda especial | Cada 5–7 rondas solo aparece un enemigo rápido y frágil. Al terminar suelta munición completa | «La Jauría» |
+| Ronda especial | Cada 5–7 rondas solo aparece un enemigo rápido y frágil. Al terminar suelta munición completa | «La Jauría»: lobos de ceniza que saltan por las ventanas |
 | Misión secreta | Cadena de 5 pasos ocultos por el mapa, con recompensa permanente para la partida | Reactivar la antena y enviar la señal |
 
 Las cuatro ventajas de lanzamiento, con nombres provisionales:
@@ -188,6 +188,20 @@ Valores de partida añadidos al empezar la fase 2:
 | Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío va hasta un 15 % más lento que la velocidad de la ronda (nunca más rápido) y se balancea hasta 1 m a los lados con su propio ritmo; a menos de 1,5 m va directo. Aceleración 8 m/s²: se mueven con peso, sin lanzarse ni empujarse a tirones. Ajustado el 2026-11-12 tras las primeras pruebas |
 
 En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
+
+La Jauría y los dos sueros que faltaban, añadidos el 2026-11-18 a petición de Alejandro. Los valores viven en `jauria.json` y `perks.json`:
+
+| Concepto | Valor |
+| --- | --- |
+| La Jauría: cuándo | La primera en la ronda 5 y después cada 5 a 7 rondas, al azar. Cuenta como una ronda más |
+| La Jauría: quiénes | Lobos de ceniza, con ojos de brasa: 2 + 1 por ronda (7 en la 5, 12 en la 10), como mucho 24. Vida: el 30 % de la de un Vacío de esa ronda. Corren a 6 m/s (siempre algo menos que tu esprint). Salen uno cada 1,1 s y hay 8 vivos a la vez como mucho |
+| La Jauría: cómo atacan | Saltan la ventana en 0,5 s sin arrancar planchas. Muerden cada 0,8 s y quitan 30. Su cabeza va baja y por delante |
+| La Jauría: ambiente | Empieza con aullidos en lugar de la sirena; la niebla se cierra y se vuelve rojiza mientras dura; el contador de ronda se pone rojo |
+| La Jauría: premio | No sueltan power-ups al azar; el último deja Munición completa |
+| Pulso | 3.000 puntos, necesita energía. Recarga en la mitad de tiempo, también cada cartucho de la escopeta |
+| Doble filo | 2.000 puntos, necesita energía. Dispara un 33 % más rápido, también las ráfagas |
+
+En el vertical slice, Pulso y Doble filo están de forma provisional en el Laboratorio, hasta que existan el Patio y la Sala de energía. Sus estaciones usan los modelos de las otras dos, teñidos con su color.
 
 Manejo de las armas, añadido el 2026-11-17 a petición de Alejandro para acercar la sensación de disparo a la del género. Con él llegan antes de tiempo las cuatro armas de pared que faltaban (M870 y SMG-5 en el Vestíbulo, V-45 en el Laboratorio; AK-74 y M16 en El Contenedor hasta que existan sus zonas). Los valores viven en `weapons.json` y `handling.json`:
 

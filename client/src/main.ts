@@ -12,7 +12,7 @@ import { initSim } from '../../shared/sim/libs';
 import { AudioEngine } from './audio/engine';
 import { Hud } from './hud';
 import { detectLanguage, setLanguage, t, type TextKey } from './i18n';
-import { ENEMY_MODEL } from './enemies';
+import { ENEMY_MODEL, PACK_MODEL } from './enemies';
 import { Input } from './input';
 import { loadModels } from './models';
 import { PerfMeter } from './perf';
@@ -72,7 +72,7 @@ async function start(): Promise<void> {
   const modelNames = [m.powerSwitch, ...m.perkStations, m.forja, ...m.contenedorSpots, ...m.decor]
     .map((f) => f.model)
     .filter((n): n is string => !!n);
-  await loadModels([...modelNames, ENEMY_MODEL]);
+  await loadModels([...modelNames, ENEMY_MODEL, PACK_MODEL]);
   const view = new GameView(cfg.map, cfg.rounds.aliveCap.max);
   const resize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -140,7 +140,7 @@ async function start(): Promise<void> {
     stats = new PlayStats();
     el('over-stats').hidden = true;
     // Solo en el servidor de desarrollo: acceso a la partida para pruebas automáticas. No existe en el build publicado.
-    if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio, __view: view });
+    if (import.meta.env.DEV) Object.assign(window, { __game: game, __audio: audio, __view: view, __input: input });
     input.setView(game.player.yaw, 0);
     input.releaseAll();
     hud.reset();

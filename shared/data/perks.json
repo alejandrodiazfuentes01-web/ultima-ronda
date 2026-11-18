@@ -11,6 +11,16 @@
       "needsPower": false,
       "selfRevivesPerGame": 3,
       "selfReviveSeconds": 5
+    },
+    "pulso": {
+      "cost": 3000,
+      "needsPower": true,
+      "reloadMultiplier": 0.5
+    },
+    "dobleFilo": {
+      "cost": 2000,
+      "needsPower": true,
+      "fireRateMultiplier": 1.33
     }
   },
   "bleedOutSeconds": 45,
