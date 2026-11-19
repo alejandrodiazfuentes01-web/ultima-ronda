@@ -128,7 +128,7 @@ S(r) = \max\left(0{,}1,\; 2 \cdot 0{,}95^{\,r-1}\right)
 Reglas fijas que acompañan a las curvas:
 
 - **Enemigos vivos a la vez:** 24 en solitario, 4 más por jugador adicional, tope de 32. El tope lo marca el rendimiento, y además crea el ritmo de la horda.
-- **Velocidad:** el jugador anda a 4,5 m/s y esprinta a 6,5. Los enemigos andan a 1,5 en las rondas 1–3, corren a 4 desde la 4 y esprintan a 6 desde la 12. Siempre algo más lentos que tu esprint: eso permite rodearlos.
+- **Velocidad:** el jugador anda a 4,5 m/s y esprinta a 6,5. Los enemigos andan a 1,5, corren a 4 o esprintan a 6, siempre algo menos que tu esprint: eso permite rodearlos. Como en el original, cada uno elige al aparecer cómo se mueve, y cada ronda hay más rápidos mezclados con lentos (cambiado el 2026-11-19; antes cambiaban todos de golpe): en la 1 todos andan; en la 2, uno de cada seis corre; en la 4, la mitad; en la 6 casi todos corren; en la 8 aparecen los primeros que esprintan, y desde la 13 esprintan todos. Lo deciden `gaits` y `gaitMix` en `enemies.json`.
 - **Vida del jugador:** 100 puntos. Cada golpe quita 45, así que el tercero derriba. Con Coraza son 200 y derriba el quinto. La vida se regenera tras 4 s sin recibir daño.
 - **Daño a la cabeza:** multiplica por 2,5.
 
