@@ -322,7 +322,7 @@ export class Effects {
         view.kind = pu.kind;
         for (const m of view.mats) m.color.setHex(PICKUP_COLOR[pu.kind] ?? 0xffffff);
       }
-      view.group.position.set(pu.x, 0.7 + Math.sin(time * 2.5 + i) * 0.12, pu.z);
+      view.group.position.set(pu.x, pu.y + 0.7 + Math.sin(time * 2.5 + i) * 0.12, pu.z);
       view.group.rotation.y = time * 2;
     });
   }

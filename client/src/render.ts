@@ -8,7 +8,7 @@
  * Enemigos y planchas van en mallas de tamaño fijo (regla 5).
  */
 import * as THREE from 'three/webgpu';
-import { zoneAt, type Box, type MapConfig, type ZoneDef } from '../../shared/config';
+import { groundHeight, zoneAt, type Box, type MapConfig, type RampDef, type ZoneDef } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { EYE_HEIGHT } from '../../shared/sim/physics';
 import type { SimEvent } from '../../shared/sim/types';
@@ -80,17 +80,79 @@ function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
   return out;
 }
 
+type Rect = [number, number, number, number];
+
+/** Distancia en planta de un punto a un rectángulo (0 si está dentro). */
+function rectDistance(r: Rect, x: number, z: number): number {
+  const dx = Math.max(r[0] - x, 0, x - r[2]);
+  const dz = Math.max(r[1] - z, 0, z - r[3]);
+  return Math.hypot(dx, dz);
+}
+
 /**
- * Recorta una caja al rectángulo de una zona, o null si no lo toca. Los muros entre
- * dos zonas quedan partidos por la mitad: cada cara tiene el aspecto de su zona.
+ * Reparte los muros entre las zonas. Cada muro se corta por los bordes de las salas;
+ * cada trozo va a la zona en la que cae o, si queda fuera (la cara exterior), a la más
+ * cercana. Así cada cara del muro tiene el aspecto de la zona que la ve.
  */
-function clipToZone(b: Box, r: [number, number, number, number]): Box | null {
-  const x0 = Math.max(b[0], r[0]);
-  const z0 = Math.max(b[2], r[1]);
-  const x1 = Math.min(b[3], r[2]);
-  const z1 = Math.min(b[5], r[3]);
-  if (x1 - x0 < 0.001 || z1 - z0 < 0.001) return null;
-  return [x0, b[1], z0, x1, b[4], z1];
+function wallsByZone(walls: Box[], areas: Array<{ zone: string; rect: Rect }>): Map<string, Box[]> {
+  const out = new Map<string, Box[]>();
+  for (const b of walls) {
+    const xs = new Set([b[0], b[3]]);
+    const zs = new Set([b[2], b[5]]);
+    for (const { rect } of areas) {
+      for (const x of [rect[0], rect[2]]) if (x > b[0] && x < b[3]) xs.add(x);
+      for (const z of [rect[1], rect[3]]) if (z > b[2] && z < b[5]) zs.add(z);
+    }
+    const sx = [...xs].sort((p, q) => p - q);
+    const sz = [...zs].sort((p, q) => p - q);
+    for (let i = 0; i + 1 < sx.length; i++) {
+      for (let j = 0; j + 1 < sz.length; j++) {
+        const cx = (sx[i]! + sx[i + 1]!) / 2;
+        const cz = (sz[j]! + sz[j + 1]!) / 2;
+        let best = areas[0]!;
+        let bestD = Infinity;
+        for (const a of areas) {
+          const d = rectDistance(a.rect, cx, cz);
+          if (d < bestD) {
+            bestD = d;
+            best = a;
+          }
+        }
+        if (!out.has(best.zone)) out.set(best.zone, []);
+        out.get(best.zone)!.push([sx[i]!, b[1], sz[j]!, sx[i + 1]!, b[4], sz[j + 1]!]);
+      }
+    }
+  }
+  return out;
+}
+
+/** Geometría de una rampa (losa inclinada) o de una escalera (peldaños). */
+function rampGeometry(r: RampDef): THREE.BufferGeometry {
+  const [x0, z0, x1, z1] = r.rect;
+  const run = r.axis === 'x' ? x1 - x0 : z1 - z0;
+  if (r.stairs) {
+    // Peldaños de unos 30 cm, cada uno una caja desde el más bajo de los dos suelos.
+    const n = Math.max(2, Math.round(run / 0.3));
+    const low = Math.min(r.y0, r.y1) - 0.2;
+    const boxes: Box[] = [];
+    for (let k = 0; k < n; k++) {
+      const a = k / n;
+      const b = (k + 1) / n;
+      const top = r.y0 + (r.y1 - r.y0) * (r.y1 > r.y0 ? b : a);
+      boxes.push(r.axis === 'x' ? [x0 + run * a, low, z0, x0 + run * b, top, z1] : [x0, low, z0 + run * a, x1, top, z0 + run * b]);
+    }
+    return boxesGeometry(boxes);
+  }
+  const g = boxesGeometry([[0, -0.3, 0, 1, 0, 1]]);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const u = p.getX(i);
+    const v = p.getZ(i);
+    const t = r.axis === 'x' ? u : v;
+    p.setXYZ(i, x0 + (x1 - x0) * u, p.getY(i) + r.y0 + (r.y1 - r.y0) * t, z0 + (z1 - z0) * v);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 /** Aspecto de cada zona: muros, suelo y techo (materiales sencillos: hay muchas luces por zona). */
@@ -180,40 +242,40 @@ export class GameView {
     moon.position.set(-6, 14, -8);
     this.scene.add(moon);
     // Suelo de fuera: nieve en la oscuridad.
-    this.scene.add(new THREE.Mesh(boxesGeometry([map.floor]), new THREE.MeshLambertMaterial({ map: snowTexture(), color: 0x6c7480 })));
+    this.scene.add(new THREE.Mesh(boxesGeometry(map.grounds), new THREE.MeshLambertMaterial({ map: snowTexture(), color: 0x6c7480 })));
 
-    // Muros, alféizares y dinteles, repartidos por zonas.
-    const walls: Box[] = [...map.walls];
-    for (const w of map.windows) {
-      const [x0, z0, x1, z1] = w.opening;
-      walls.push([x0, 0, z0, x1, map.sillHeight, z1], [x0, map.windowTop, z0, x1, map.wallHeight, z1]);
-    }
-    // Los bordes del mapa se amplían un poco para que los muros exteriores caigan dentro de su zona.
-    const minX = Math.min(...map.zones.map((z) => z.area[0]));
-    const minZ = Math.min(...map.zones.map((z) => z.area[1]));
-    const maxX = Math.max(...map.zones.map((z) => z.area[2]));
-    const maxZ = Math.max(...map.zones.map((z) => z.area[3]));
-    const grow = (v: number, edge: number, d: number) => (v === edge ? v + d : v);
+    // Muros (con sus alféizares y dinteles), repartidos por zonas; cada sala con su suelo y su techo.
+    const areas = [
+      ...map.zones.flatMap((z) => z.rooms.map((r) => ({ zone: z.id, rect: r.rect }))),
+      ...map.ramps.map((r) => ({ zone: r.zone, rect: r.rect })),
+    ];
+    const zoneWalls = wallsByZone(map.walls, areas);
     for (const zone of map.zones) {
-      const [x0, z0, x1, z1] = zone.area;
-      const clip: [number, number, number, number] = [grow(x0, minX, -1), grow(z0, minZ, -1), grow(x1, maxX, 1), grow(z1, maxZ, 1)];
       const look = zoneLook(zone.id);
       const group = new THREE.Group();
       group.name = zone.id;
-      const mine = walls.map((b) => clipToZone(b, clip)).filter((b): b is Box => b !== null);
-      group.add(new THREE.Mesh(boxesGeometry(mine), look.wall));
-      group.add(new THREE.Mesh(boxesGeometry([[x0, 0, z0, x1, 0.004, z1]]), look.floor));
-      if (zone.roofed) group.add(new THREE.Mesh(boxesGeometry([[x0, map.wallHeight, z0, x1, map.wallHeight + 0.15, z1]]), look.ceiling));
+      const mine = zoneWalls.get(zone.id) ?? [];
+      if (mine.length) group.add(new THREE.Mesh(boxesGeometry(mine), look.wall));
+      group.add(new THREE.Mesh(boxesGeometry(zone.rooms.map((r) => [r.rect[0], r.floor - 0.02, r.rect[1], r.rect[2], r.floor + 0.004, r.rect[3]] as Box)), look.floor));
+      const roofs = zone.rooms.filter((r) => r.roofed).map((r) => [r.rect[0], r.floor + r.height, r.rect[1], r.rect[2], r.floor + r.height + 0.15, r.rect[3]] as Box);
+      for (const ramp of map.ramps) {
+        if (ramp.zone !== zone.id) continue;
+        group.add(new THREE.Mesh(rampGeometry(ramp), look.floor));
+        if (ramp.roof !== null) roofs.push([ramp.rect[0], ramp.roof, ramp.rect[1], ramp.rect[2], ramp.roof + 0.15, ramp.rect[3]]);
+      }
+      if (roofs.length) group.add(new THREE.Mesh(boxesGeometry(roofs), look.ceiling));
       this.zoneGroups.set(zone.id, group);
       this.scene.add(group);
     }
 
-    // Al aire libre: nieve en las zonas sin techo y la torre de radio, que se ve por encima de los muros.
+    // Al aire libre: nieve en las salas sin techo y la torre de radio, que se ve por encima de los muros.
     for (const zone of map.zones) {
-      if (zone.roofed) continue;
-      const snow = new Snow(zone.area);
-      this.snow.push(snow);
-      this.zoneGroups.get(zone.id)!.add(snow.mesh);
+      for (const room of zone.rooms) {
+        if (room.roofed) continue;
+        const snow = new Snow(room.rect, room.floor);
+        this.snow.push(snow);
+        this.zoneGroups.get(zone.id)!.add(snow.mesh);
+      }
     }
     if (map.radioTower) {
       this.tower = new RadioTower(map);
@@ -240,7 +302,7 @@ export class GameView {
       gun.position.set(0.05, 0.02, 0.09);
       group.add(gun);
       // El ancla está delante del muro; el panel va pegado a él.
-      group.position.set(b.anchor[0] - b.facing[0] * 0.66, 1.5, b.anchor[1] - b.facing[1] * 0.66);
+      group.position.set(b.anchor[0] - b.facing[0] * 0.66, groundHeight(map, b.anchor[0], b.anchor[1]) + 1.5, b.anchor[1] - b.facing[1] * 0.66);
       group.rotation.y = Math.atan2(b.facing[0], b.facing[1]);
       this.attach(group, b.anchor[0], b.anchor[1]);
     }
@@ -253,8 +315,8 @@ export class GameView {
       new THREE.MeshStandardMaterial({ color: COLORS.plank, roughness: 0.55, metalness: 0.5 }),
       plankCount,
     );
-    const span = map.windowTop - map.sillHeight;
     for (const w of map.windows) {
+      const span = w.top - w.sillTop;
       const [x0, z0, x1, z1] = w.opening;
       const alongX = x1 - x0 > z1 - z0;
       const out = new THREE.Vector2(w.outside[0] - w.inside[0], w.outside[1] - w.inside[1]).normalize();
@@ -268,7 +330,7 @@ export class GameView {
         const along = u * (width / 2);
         const cx = alongX ? (x0 + x1) / 2 + along : (out.x > 0 ? x0 : x1) - out.x * depth;
         const cz = alongX ? (out.y > 0 ? z0 : z1) - out.y * depth : (z0 + z1) / 2 - along;
-        tmpPos.set(cx, map.sillHeight + v * span, cz);
+        tmpPos.set(cx, w.sillTop + v * span, cz);
         tmpQuat.setFromEuler(new THREE.Euler(0, baseYaw, angle, 'YXZ'));
         tmpScale.set(spec.length(width, span), PLANK_WIDTH, 0.03);
         this.plankMatrices.push(new THREE.Matrix4().compose(tmpPos, tmpQuat, tmpScale));

@@ -37,10 +37,10 @@ describe('datos de balance', () => {
     expect(enemySpeed(40, cfg.enemies)).toBeLessThan(cfg.player.sprintSpeed);
   });
 
-  it('el mapa del prototipo: vestíbulo con 4 ventanas, laboratorio con 2, puerta de 750 y SMG-5 de 750', () => {
+  it('el mapa: vestíbulo con 4 ventanas, laboratorio con 3, puerta de 750 y SMG-5 de 750', () => {
     const byZone = (z: string) => cfg.map.windows.filter((w) => w.zone === z).length;
     expect(byZone('vestibulo')).toBe(4);
-    expect(byZone('laboratorio')).toBe(2);
+    expect(byZone('laboratorio')).toBe(3);
     expect(cfg.map.doors[0]?.cost).toBe(750);
     expect(cfg.map.wallBuys[0]).toMatchObject({ weapon: 'smg5', cost: 750 });
   });

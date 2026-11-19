@@ -4,7 +4,7 @@
  * y el futuro servidor la leen igual.
  */
 import type { CrowdAgent } from '@recast-navigation/core';
-import { enemySpeed, jauriaCount, type GameConfig, type PowerupKind, type WeaponConfig } from '../config';
+import { enemySpeed, groundHeight, jauriaCount, zoneAt, type GameConfig, type PowerupKind, type WeaponConfig } from '../config';
 import { aliveCap, enemyCount, enemyHealth, spawnInterval } from '../rounds';
 import { SIM_DT } from './fixedStep';
 import { Navigation } from './nav';
@@ -20,6 +20,16 @@ const BULLET_RANGE = 100;
 const CONTACT_DISTANCE = 0.7;
 /** Cada cuántos pasos recalculan los enemigos su destino. */
 const RETARGET_TICKS = 10;
+/** Cuánto tiene que moverse el destino de un enemigo para volver a pedir ruta: lejos y cerca del jugador. */
+const RETARGET_FAR = 1.5;
+const RETARGET_NEAR = 0.25;
+const RETARGET_MID = 0.4;
+/** Cada cuántos pasos se vuelve a pedir la ruta aunque el destino no cambie. */
+const REPATH_TICKS = 90;
+/** Un enemigo que en este tiempo no se ha movido esta distancia, lejos del jugador, vuelve a salir. */
+const STUCK_SECONDS = 8;
+const STUCK_MOVE = 0.6;
+const STUCK_NEAR_PLAYER = 3;
 /** Huecos para power-ups en el suelo a la vez. */
 const PICKUP_POOL = 8;
 /** Altura del pecho de cada tipo de enemigo, para dibujar el arco del Arco voltaico. */
@@ -51,6 +61,11 @@ export interface EnemyState {
   sway: number;
   swayFreq: number;
   swayPhase: number;
+  /** Último destino pedido a la navegación (para no recalcular la ruta sin necesidad) y cuándo. */
+  target: Vec3 | null;
+  targetTick: number;
+  /** Dónde estaba hace un rato y desde cuándo no se mueve de ahí (para detectar atascos). */
+  stuckAt: { x: number; z: number; seconds: number };
 }
 
 export interface WeaponSlot {
@@ -144,6 +159,8 @@ export interface PickupState {
   active: boolean;
   kind: PowerupKind;
   x: number;
+  /** Altura del suelo donde cayó. */
+  y: number;
   z: number;
   timer: number;
 }
@@ -258,9 +275,12 @@ export class Game {
         sway: 0,
         swayFreq: 0,
         swayPhase: 0,
+        target: null,
+        targetTick: 0,
+        stuckAt: { x: 0, z: 0, seconds: 0 },
       });
     }
-    for (let i = 0; i < PICKUP_POOL; i++) this.pickups.push({ active: false, kind: 'municionCompleta', x: 0, z: 0, timer: 0 });
+    for (let i = 0; i < PICKUP_POOL; i++) this.pickups.push({ active: false, kind: 'municionCompleta', x: 0, y: 0, z: 0, timer: 0 });
 
     this.contenedor = { spot: 0, phase: 'idle', timer: 0, weapon: null, uses: 0, movesAfter: this.rollMovesAfter() };
 
@@ -489,8 +509,9 @@ export class Game {
   /** Coloca al jugador en un punto del suelo (pruebas y jugador automático). */
   teleportPlayer(x: number, z: number): void {
     const p = this.player;
-    p.pos = { x, y: 0, z };
-    p.prevPos = { x, y: 0, z };
+    const y = groundHeight(this.cfg.map, x, z);
+    p.pos = { x, y, z };
+    p.prevPos = { x, y, z };
     p.vy = 0;
     p.vel.x = 0;
     p.vel.z = 0;
@@ -1057,17 +1078,18 @@ export class Game {
     const pc = this.cfg.powerups;
     if (this.round.special || this.round.powerupsDropped >= pc.maxPerRound || pc.kinds.length === 0) return;
     if (this.rng.next() >= pc.dropChance) return;
-    this.dropPowerup(pc.kinds[this.rng.int(pc.kinds.length)]!, at.x, at.z);
+    this.dropPowerup(pc.kinds[this.rng.int(pc.kinds.length)]!, at.x, at.z, at.y);
   }
 
   /** Deja un power-up en el suelo. Público para pruebas. */
-  dropPowerup(kind: PowerupKind, x: number, z: number): number {
+  dropPowerup(kind: PowerupKind, x: number, z: number, y = groundHeight(this.cfg.map, x, z)): number {
     const slot = this.pickups.findIndex((pu) => !pu.active);
     if (slot < 0) return -1;
     const pu = this.pickups[slot]!;
     pu.active = true;
     pu.kind = kind;
     pu.x = x;
+    pu.y = y;
     pu.z = z;
     pu.timer = this.cfg.powerups.lifetimeSeconds;
     this.round.powerupsDropped++;
@@ -1092,7 +1114,7 @@ export class Game {
         this.events.push({ type: 'powerupExpired', slot });
         return;
       }
-      if (Math.hypot(p.pos.x - pu.x, p.pos.z - pu.z) <= pc.pickupRadius) {
+      if (Math.hypot(p.pos.x - pu.x, p.pos.z - pu.z) <= pc.pickupRadius && Math.abs(p.pos.y - pu.y) < 1.5) {
         pu.active = false;
         this.applyPowerup(pu.kind);
       }
@@ -1202,7 +1224,7 @@ export class Game {
     e.sway = this.rng.next() * hd.swayMeters;
     e.swayFreq = 0.3 + this.rng.next() * 0.5;
     e.swayPhase = this.rng.next() * Math.PI * 2;
-    e.pos = { x: w.spawn[0], y: 0, z: w.spawn[1] };
+    e.pos = { x: w.spawn[0], y: w.groundY, z: w.spawn[1] };
     e.prevPos = { ...e.pos };
     e.timer = 0;
     e.attackTimer = this.attackInterval(e) * 0.5;
@@ -1218,7 +1240,7 @@ export class Game {
   spawnEnemyInside(x: number, z: number): EnemyState | null {
     const e = this.spawnEnemy(0);
     if (!e) return null;
-    e.pos = { x, y: 0, z };
+    e.pos = { x, y: groundHeight(this.cfg.map, x, z), z };
     e.prevPos = { ...e.pos };
     e.phase = 'chasing';
     e.agent = this.nav.addAgent(e.pos, e.speed, this.cfg.enemies.horde);
@@ -1246,13 +1268,13 @@ export class Game {
     this.addPoints(part === 'melee' ? eco.killMelee : part === 'head' ? eco.killHead : eco.killBody);
     // Los power-ups solo caen dentro del edificio, donde el jugador puede cogerlos.
     const w = this.cfg.map.windows[e.window]!;
-    const dropAt = e.phase === 'chasing' ? { ...e.pos } : { x: w.inside[0], y: 0, z: w.inside[1] };
+    const dropAt = e.phase === 'chasing' ? { ...e.pos } : { x: w.inside[0], y: w.floorY, z: w.inside[1] };
     const at = { ...e.pos };
     this.removeEnemy(e);
     this.round.kills++;
     this.maybeDropPowerup(dropAt);
     // El último de La Jauría deja munición completa.
-    if (this.round.special && this.round.toSpawn === 0 && this.round.alive === 0) this.dropPowerup('municionCompleta', dropAt.x, dropAt.z);
+    if (this.round.special && this.round.toSpawn === 0 && this.round.alive === 0) this.dropPowerup('municionCompleta', dropAt.x, dropAt.z, dropAt.y);
     if (upgraded && !fromWave) this.ashWave(at);
   }
 
@@ -1328,17 +1350,33 @@ export class Game {
         const t = Math.min(1, 1 - e.timer / total);
         e.pos.x = w.outside[0] + (w.inside[0] - w.outside[0]) * t;
         e.pos.z = w.outside[1] + (w.inside[1] - w.outside[1]) * t;
-        e.pos.y = Math.sin(Math.PI * t) * map.sillHeight * (e.kind === 'jauria' ? VAULT_LIFT : 1);
+        const lift = (w.sillTop - Math.max(w.floorY, w.groundY)) * (e.kind === 'jauria' ? VAULT_LIFT : 1);
+        e.pos.y = w.groundY + (w.floorY - w.groundY) * t + Math.sin(Math.PI * t) * Math.max(0.3, lift);
         if (e.timer <= 0) {
-          e.pos.y = 0;
+          e.pos.y = w.floorY;
           e.phase = 'chasing';
           e.agent = this.nav.addAgent(e.pos, e.speed, this.cfg.enemies.horde);
+          e.target = null;
+          e.stuckAt = { x: e.pos.x, z: e.pos.z, seconds: 0 };
           this.retarget(e);
           this.events.push({ type: 'enemyEntered', enemy: e.index });
         }
       } else if (e.phase === 'chasing' && e.agent) {
         anyAgents = true;
         if ((this.tick + e.index) % RETARGET_TICKS === 0) this.retarget(e);
+        // Atascado lejos del jugador: vuelve a salir por una ventana, como en el género.
+        const st = e.stuckAt;
+        const far = Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) > STUCK_NEAR_PLAYER;
+        if (!far || Math.hypot(e.pos.x - st.x, e.pos.z - st.z) > STUCK_MOVE) {
+          st.x = e.pos.x;
+          st.z = e.pos.z;
+          st.seconds = 0;
+        } else if ((st.seconds += SIM_DT) > STUCK_SECONDS) {
+          this.events.push({ type: 'enemyRecycled', enemy: e.index, at: { ...e.pos } });
+          this.removeEnemy(e);
+          this.round.toSpawn++;
+          continue;
+        }
       }
 
       // Ataque: si el jugador está al alcance, también a través de la ventana.
@@ -1366,7 +1404,8 @@ export class Game {
         const v = e.agent.velocity();
         e.pos.x = a.x;
         e.pos.z = a.z;
-        e.pos.y = 0;
+        // La malla de navegación va unos centímetros por encima del suelo: se usa el suelo de verdad.
+        e.pos.y = groundHeight(this.cfg.map, a.x, a.z);
         if (Math.hypot(v.x, v.z) > 0.3) e.yaw = Math.atan2(-v.x, -v.z);
       }
     }
@@ -1396,13 +1435,19 @@ export class Game {
         }
       });
       const t = far as [number, number] | null;
-      if (t) e.agent.requestMoveTarget(this.nav.closest({ x: t[0], y: 0, z: t[1] }));
+      if (t) this.moveTo(e, { x: t[0], y: groundHeight(this.cfg.map, t[0], t[1]), z: t[1] }, RETARGET_FAR);
       return;
     }
     const dx = e.pos.x - p.x;
     const dz = e.pos.z - p.z;
     const d = Math.hypot(dx, dz);
     const hd = this.cfg.enemies.horde;
+    if (zoneAt(this.cfg.map, e.pos.x, e.pos.z) !== zoneAt(this.cfg.map, p.x, p.z)) {
+      // En otra zona: derecho a por el jugador. Sin balanceo, la ruta no cambia de un lado a otro
+      // cuando hay dos caminos casi iguales.
+      this.moveTo(e, { x: p.x, y: p.y, z: p.z }, RETARGET_FAR);
+      return;
+    }
     if (d > hd.directWithin) {
       // Lejos: cada uno a su manera. Unos van a donde el jugador va a estar (cortan el paso)
       // y todos se balancean a los lados con su propio ritmo, así que no siguen el mismo rastro.
@@ -1413,12 +1458,29 @@ export class Game {
       const pz = dx / d;
       const tx = p.x + v.x * e.lead + px * side;
       const tz = p.z + v.z * e.lead + pz * side;
-      e.agent.requestMoveTarget(this.nav.closest({ x: tx, y: 0, z: tz }));
+      this.moveTo(e, { x: tx, y: p.y, z: tz }, RETARGET_MID);
       return;
     }
     // Cerca: directo a por el jugador, parándose al tocarlo.
     const off = d > 0.01 ? CONTACT_DISTANCE / d : 0;
-    e.agent.requestMoveTarget(this.nav.closest({ x: p.x + dx * off, y: 0, z: p.z + dz * off }));
+    this.moveTo(e, { x: p.x + dx * off, y: p.y, z: p.z + dz * off }, RETARGET_NEAR);
+  }
+
+  /**
+   * Pide a la navegación que lleve al enemigo a un punto, solo si ha cambiado lo bastante
+   * desde la última vez: las rutas largas tardan unos pasos en calcularse, y pedirlas
+   * de nuevo sin parar haría que nunca terminaran.
+   */
+  private moveTo(e: EnemyState, point: Vec3, minChange: number): void {
+    if (!e.agent) return;
+    const last = e.target;
+    // Aunque no cambie, se vuelve a pedir de vez en cuando: si había muchos pidiendo ruta a la vez,
+    // la navegación pudo quedarse con un camino a medias.
+    const fresh = this.tick - e.targetTick < REPATH_TICKS;
+    if (last && fresh && Math.hypot(last.x - point.x, last.z - point.z) < minChange && Math.abs(last.y - point.y) < 1) return;
+    e.target = point;
+    e.targetTick = this.tick;
+    e.agent.requestMoveTarget(this.nav.closest(point));
   }
 
   /** Radio del jugador, para quien dibuja. */
