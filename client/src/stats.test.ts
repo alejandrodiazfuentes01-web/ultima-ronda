@@ -21,7 +21,7 @@ function step(g: Game, stats: PlayStats, input: Partial<PlayerInput> = {}): void
 
 describe('resumen de partida', () => {
   it('cuenta ronda, disparos, aciertos, bajas, puntos ganados y gastados y compras', () => {
-    game = new Game(loadConfig(), { invulnerable: true, damageScale: 100 });
+    game = new Game(loadConfig(), { invulnerable: true, damageScale: 100, noSpread: true });
     const g = game;
     const stats = new PlayStats();
     step(g, stats); // recoge el inicio de la ronda 1

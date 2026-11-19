@@ -30,6 +30,8 @@ export interface BotReport {
   kills: number;
   /** Enemigos que han salido en toda la partida (deben ser los mismos que las bajas). */
   spawned: number;
+  /** Enemigos que se atascaron y volvieron a salir por una ventana, con dónde estaban. */
+  recycled: Array<{ x: number; z: number }>;
   /** Rondas de La Jauría jugadas. */
   specialRounds: number;
   doorOpened: boolean;
@@ -42,6 +44,8 @@ export interface BotOptions {
   damageScale?: number;
   /** Abre todo el mapa al empezar: los Vacíos llegan desde todas las zonas. */
   openAll?: boolean;
+  /** Se llama tras cada paso (para depurar). */
+  onStep?: (game: Game) => void;
 }
 
 export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
@@ -52,6 +56,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
   let roundsCompleted = 0;
   let spawned = 0;
   let specialRounds = 0;
+  const recycled: Array<{ x: number; z: number }> = [];
   let fireToggle = false;
   const [ax, az] = cfg.map.doors[0]!.anchors[0]!;
   const post = { x: ax - POST_BEFORE_DOOR, z: az };
@@ -64,6 +69,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
       const input = decide(game, fireToggle, post);
       fireToggle = !fireToggle;
       game.step(input);
+      opts.onStep?.(game);
 
       for (const ev of game.events) {
         if (ev.type === 'roundEnd') roundsCompleted = ev.round;
@@ -71,6 +77,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
           roundStartTick = game.tick;
           if (ev.special) specialRounds++;
         }
+        if (ev.type === 'enemyRecycled') recycled.push({ x: ev.at.x, z: ev.at.z });
         if (ev.type === 'enemySpawned') {
           spawned++;
           const e = game.enemies[ev.enemy]!;
@@ -106,7 +113,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
     if (roundsCompleted < opts.rounds && problems.length === 0) {
       problems.push(`Solo se completaron ${roundsCompleted} de ${opts.rounds} rondas`);
     }
-    return { roundsCompleted, simSeconds: game.tick * SIM_DT, kills: game.round.kills, spawned, specialRounds, doorOpened: game.doors[0]!.open, problems };
+    return { roundsCompleted, simSeconds: game.tick * SIM_DT, kills: game.round.kills, spawned: spawned - recycled.length, recycled, specialRounds, doorOpened: game.doors[0]!.open, problems };
   } finally {
     game.free();
   }

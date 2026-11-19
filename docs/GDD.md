@@ -287,7 +287,7 @@ Conexiones entre zonas (cada conexión es una puerta de pago):
 | 6 | Sala de energía ↔ Torre de radio | 1.250 |
 | 7 | Patio exterior ↔ Torre de radio | 1.500 |
 
-Disposición en cuadrícula de 3 × 2: fila superior Vestíbulo, Laboratorio, Sala de energía; fila inferior Almacén, Patio exterior, Torre de radio.
+Disposición: una estación de montaña creíble, no una cuadrícula (cambiado el 2026-11-19 a petición de Alejandro: seis salas cuadradas iguales no parecían un edificio). Del Vestíbulo sale hacia el este el pasillo del Laboratorio, que acaba en una escalera que baja a la Sala de energía, en un sótano. Al sur del Vestíbulo, un paso corto lleva al Almacén, un hangar alto. Entre el hangar y el Laboratorio queda el Patio exterior, al aire libre. La Torre de radio está en una loma al este del Patio: se sube por una rampa desde el Patio o por una escalera desde el sótano de energía.
 
 El circuito izquierdo une vestíbulo, laboratorio, patio y almacén. El derecho une laboratorio, sala de energía, torre y patio.
 
@@ -312,13 +312,16 @@ Reglas de construcción del nivel:
 
 Cómo está construido (2026-11-19):
 
-- Cuadrícula de 36 × 26 m: la fila norte mide 12 m de fondo y la sur 14. Muros de 3,2 m.
-- Ventanas: cuatro en el Vestíbulo, dos en el Laboratorio, dos en la Sala de energía, tres en el Almacén, dos en el Patio y tres en la Torre.
-- Bloques que se rodean para mover la horda: el central del Laboratorio, una estantería en el Almacén, un contenedor de carga en el Patio y dos transformadores en la Sala de energía.
-- El Patio y la Torre de radio están al aire libre, con nieve; la torre de celosía mide 18 m y se ve por encima de los muros.
+- Vestíbulo: la entrada, 12 × 12 m, con cuatro ventanas.
+- Laboratorio: un pasillo de 18 m por 3 de ancho, con una sala a cada lado; tres ventanas.
+- Sala de energía: un sótano 1,2 m por debajo del suelo, al que se baja por una escalera desde el final del pasillo; dos ventanucos a ras del suelo de fuera y un transformador en medio.
+- Almacén: un paso corto desde el Vestíbulo y un hangar de 16 × 12 m y 4,5 m de alto, con dos estanterías largas que forman pasillos; tres ventanas.
+- Patio exterior: 15 × 14 m al aire libre, con nieve, un contenedor de carga y un camión para rodearlos; dos entradas.
+- Torre de radio: una loma de hormigón 1,2 m por encima del Patio, al aire libre, con la torre de celosía de 18 m en medio; tres entradas.
 - Sin energía, las zonas cerradas tienen luz roja de emergencia; al encenderla, luz blanca.
-- Una compuerta cerrada corta el paso a los Vacíos: no pueden cruzarla ni atajar por una zona cerrada.
+- Una compuerta cerrada corta el paso a los Vacíos: no pueden cruzarla ni atajar por una zona cerrada. Si uno se queda atascado lejos del jugador más de 8 s, vuelve a salir por una ventana.
 - Para que vaya fluido, solo se dibujan la zona del jugador y las que se ven por compuertas abiertas.
+- El mapa se genera con `node scripts/generar-estacion.mjs`.
 
 Ritmo esperado de una partida media: energía encendida en las rondas 5–7, primera mejora en La Forja en las rondas 10–12, mapa abierto del todo hacia la 12.
 

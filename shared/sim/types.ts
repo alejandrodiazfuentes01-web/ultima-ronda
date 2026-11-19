@@ -68,6 +68,7 @@ export type SimEvent =
   | { type: 'plankRepaired'; window: number }
   | { type: 'enemySpawned'; enemy: number }
   | { type: 'enemyEntered'; enemy: number }
+  | { type: 'enemyRecycled'; enemy: number; at: Vec3 }
   | { type: 'powerOn' }
   | { type: 'downed'; revivesLeft: number }
   | { type: 'revived' }

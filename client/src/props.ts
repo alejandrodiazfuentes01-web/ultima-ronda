@@ -134,7 +134,9 @@ export class Props {
     for (const zone of map.zones) {
       for (const [x, z] of zone.lights) {
         const l = zone.startsOpen ? new THREE.PointLight(0xffc98a, 14, 14, 1.6) : new THREE.PointLight(EMERGENCY, EMERGENCY_INTENSITY, 14, 1.6);
-        l.position.set(x, zone.roofed ? 2.9 : 4.5, z);
+        // Bajo el techo de su sala, o en un poste a 4,5 m si es al aire libre.
+        const room = zone.rooms.find((r) => x >= r.rect[0] && x < r.rect[2] && z >= r.rect[1] && z < r.rect[3]) ?? zone.rooms[0]!;
+        l.position.set(x, room.roofed ? room.floor + room.height - 0.3 : room.floor + 4.5, z);
         if (!zone.startsOpen) this.zoneLights.push(l);
         scene.add(l);
       }

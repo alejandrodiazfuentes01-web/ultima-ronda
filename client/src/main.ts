@@ -64,8 +64,7 @@ async function start(): Promise<void> {
   renderer.setPixelRatio(fullPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight, false);
 
-  // Mapa de prueba con más espacio: ?mapa=amplio. Sin parámetro, el normal.
-  const cfg = loadConfig(params.get('mapa') === 'amplio' ? 'amplio' : 'prototipo');
+  const cfg = loadConfig();
   await Promise.all([renderer.init(), initSim()]);
   const usingWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
   const perf = new PerfMeter(el('perf'), t(usingWebGPU ? 'renderer.webgpu' : 'renderer.webgl2'));

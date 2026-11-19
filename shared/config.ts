@@ -5,7 +5,6 @@
 import rawEconomy from './data/economy.json';
 import rawEnemies from './data/enemies.json';
 import rawMap from './data/maps/prototipo.json';
-import rawMapWide from './data/maps/amplio.json';
 import rawPlayer from './data/player.json';
 import rawWeapons from './data/weapons.json';
 import rawPerks from './data/perks.json';
@@ -316,25 +315,74 @@ export interface WindowDef {
   inside: Point2;
   outside: Point2;
   spawn: Point2;
+  /** Alturas: suelo de dentro, suelo de fuera, alféizar, parte de arriba del hueco y del muro. */
+  floorY: number;
+  groundY: number;
+  sillTop: number;
+  top: number;
+  wallTop: number;
 }
 
-/** Una zona del mapa: su rectángulo en planta, si tiene techo y dónde van sus luces. */
+/** Una pieza rectangular de una zona, con su altura de suelo y de techo. */
+export interface RoomDef {
+  rect: [number, number, number, number];
+  floor: number;
+  height: number;
+  roofed: boolean;
+}
+
+/** Rampa o escalera: el suelo pasa de y0 (lado menor del eje) a y1 (lado mayor). */
+export interface RampDef {
+  zone: string;
+  rect: [number, number, number, number];
+  axis: 'x' | 'z';
+  y0: number;
+  y1: number;
+  /** Se dibuja con peldaños (para andar es una rampa). */
+  stairs: boolean;
+  /** Altura del techo encima, o null si va al aire libre. */
+  roof: number | null;
+}
+
+/** Una zona del mapa: sus salas, si tiene techo y dónde van sus luces. */
 export interface ZoneDef {
   id: string;
   startsOpen: boolean;
-  /** [minX, minZ, maxX, maxZ], con los muros que la rodean en sus bordes. */
-  area: [number, number, number, number];
+  rooms: RoomDef[];
+  /** Si todas sus salas tienen techo. */
   roofed: boolean;
   lights: Point2[];
 }
 
-/** Zona en la que cae un punto del suelo, o null si está fuera del edificio. */
+const inRect = (r: [number, number, number, number], x: number, z: number) => x >= r[0] && x < r[2] && z >= r[1] && z < r[3];
+
+/** Zona en la que cae un punto del suelo (en una sala o en una rampa), o null si está fuera del edificio. */
 export function zoneAt(map: MapConfig, x: number, z: number): ZoneDef | null {
-  for (const zn of map.zones) {
-    const [x0, z0, x1, z1] = zn.area;
-    if (x >= x0 && x < x1 && z >= z0 && z < z1) return zn;
+  for (const zn of map.zones) if (zn.rooms.some((r) => inRect(r.rect, x, z))) return zn;
+  const ramp = map.ramps.find((r) => inRect(r.rect, x, z));
+  return ramp ? (map.zones.find((zn) => zn.id === ramp.zone) ?? null) : null;
+}
+
+/** Altura del suelo en un punto: la de su rampa, su sala o, fuera, la del terreno (0). */
+export function groundHeight(map: MapConfig, x: number, z: number): number {
+  for (const r of map.ramps) {
+    if (!inRect(r.rect, x, z)) continue;
+    const [x0, z0, x1, z1] = r.rect;
+    const t = r.axis === 'x' ? (x - x0) / (x1 - x0) : (z - z0) / (z1 - z0);
+    return r.y0 + (r.y1 - r.y0) * t;
   }
-  return null;
+  for (const zn of map.zones) for (const room of zn.rooms) if (inRect(room.rect, x, z)) return room.floor;
+  return 0;
+}
+
+/** Rectángulo que abarca todas las salas de una zona. */
+export function zoneBounds(zone: ZoneDef): [number, number, number, number] {
+  return [
+    Math.min(...zone.rooms.map((r) => r.rect[0])),
+    Math.min(...zone.rooms.map((r) => r.rect[1])),
+    Math.max(...zone.rooms.map((r) => r.rect[2])),
+    Math.max(...zone.rooms.map((r) => r.rect[3])),
+  ];
 }
 
 /** Cajas sólidas de las patas de la torre de radio. */
@@ -351,7 +399,7 @@ export function towerLegs(map: MapConfig): Box[] {
   ].map(([sx, sz]) => {
     const x = cx + sx! * t.half;
     const z = cz + sz! * t.half;
-    return [x - h, 0, z - h, x + h, 3.2, z + h] as Box;
+    return [x - h, t.base, z - h, x + h, t.base + 3.2, z + h] as Box;
   });
 }
 
@@ -361,15 +409,16 @@ export interface MapConfig {
   sillHeight: number;
   windowTop: number;
   planksPerWindow: number;
-  floor: Box;
+  /** Suelo de fuera (con huecos donde se baja). */
+  grounds: Box[];
   walls: Box[];
+  ramps: RampDef[];
   windows: WindowDef[];
   /** Compuertas de pago: cada una une dos zonas y, al abrirla, abre las dos. */
   doors: Array<{ id: string; cost: number; box: Box; anchors: Point2[]; connects: [string, string] }>;
   wallBuys: Array<{ id: string; weapon: string; cost: number; anchor: Point2; facing: Point2 }>;
   zones: ZoneDef[];
   playerStart: { position: [number, number, number]; yaw: number };
-  navFloors: Array<[number, number, number, number]>;
   powerSwitch: Fixture;
   perkStations: Array<Fixture & { perk: string }>;
   forja: Fixture;
@@ -378,7 +427,7 @@ export interface MapConfig {
   /** Área del Laboratorio: [minX, minZ, maxX, maxZ] (sale de su zona). */
   labArea: [number, number, number, number];
   /** Torre de radio: patas sólidas y la estructura que se ve de lejos. */
-  radioTower: { center: Point2; half: number; leg: number; height: number } | null;
+  radioTower: { center: Point2; half: number; leg: number; height: number; base: number } | null;
 }
 
 /** Objeto fijo con el que se interactúa: punto de uso, hacia dónde mira y su caja sólida. */
@@ -419,11 +468,22 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
   const zones = arr(o, 'zones', w).map((z, i) => {
     const zo = obj(z, `${w}.zones[${i}]`);
     const zw = `${w}.zones[${i}]`;
+    const rooms = arr(zo, 'rooms', zw).map((rr, j): RoomDef => {
+      const rw = `${zw}.rooms[${j}]`;
+      const ro = obj(rr, rw);
+      return {
+        rect: nums(ro.rect, 4, `${rw}.rect`) as RoomDef['rect'],
+        floor: num(ro, 'floor', rw, { min: -20, max: 20 }),
+        height: num(ro, 'height', rw),
+        roofed: bool(ro, 'roofed', rw),
+      };
+    });
+    if (rooms.length === 0) throw new DataError(`${zw}.rooms: una zona necesita al menos una sala`);
     return {
       id: str(zo, 'id', zw),
       startsOpen: bool(zo, 'startsOpen', zw),
-      area: nums(zo.area, 4, `${zw}.area`) as ZoneDef['area'],
-      roofed: bool(zo, 'roofed', zw),
+      rooms,
+      roofed: rooms.every((r) => r.roofed),
       lights: arr(zo, 'lights', zw).map((l, j) => nums(l, 2, `${zw}.lights[${j}]`) as Point2),
     };
   });
@@ -440,6 +500,11 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       inside: nums(wo.inside, 2, `${ww}.inside`) as Point2,
       outside: nums(wo.outside, 2, `${ww}.outside`) as Point2,
       spawn: nums(wo.spawn, 2, `${ww}.spawn`) as Point2,
+      floorY: num(wo, 'floorY', ww, { min: -20, max: 20 }),
+      groundY: num(wo, 'groundY', ww, { min: -20, max: 20 }),
+      sillTop: num(wo, 'sillTop', ww, { min: -20, max: 20 }),
+      top: num(wo, 'top', ww, { min: -20, max: 20 }),
+      wallTop: num(wo, 'wallTop', ww, { min: -20, max: 20 }),
     };
   });
 
@@ -481,8 +546,21 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
     sillHeight: num(o, 'sillHeight', w),
     windowTop: num(o, 'windowTop', w),
     planksPerWindow: num(o, 'planksPerWindow', w, { int: true, min: 1 }),
-    floor: boxOf(o.floor, `${w}.floor`),
+    grounds: arr(o, 'grounds', w).map((b, i) => boxOf(b, `${w}.grounds[${i}]`)),
     walls: arr(o, 'walls', w).map((b, i) => boxOf(b, `${w}.walls[${i}]`)),
+    ramps: arr(o, 'ramps', w).map((x, i): RampDef => {
+      const rw = `${w}.ramps[${i}]`;
+      const ro = obj(x, rw);
+      return {
+        zone: str(ro, 'zone', rw, zoneIds),
+        rect: nums(ro.rect, 4, `${rw}.rect`) as RampDef['rect'],
+        axis: str(ro, 'axis', rw, ['x', 'z']) as RampDef['axis'],
+        y0: num(ro, 'y0', rw, { min: -20, max: 20 }),
+        y1: num(ro, 'y1', rw, { min: -20, max: 20 }),
+        stairs: bool(ro, 'stairs', rw),
+        roof: ro.roof === null ? null : num(ro, 'roof', rw, { min: -20, max: 40 }),
+      };
+    }),
     windows,
     doors,
     wallBuys,
@@ -491,17 +569,22 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       position: nums(ps.position, 3, `${w}.playerStart.position`) as [number, number, number],
       yaw: num(ps, 'yaw', `${w}.playerStart`, { min: -Math.PI * 2, max: Math.PI * 2 }),
     },
-    navFloors: arr(o, 'navFloors', w).map((r, i) => nums(r, 4, `${w}.navFloors[${i}]`) as [number, number, number, number]),
     labArea: (() => {
       const lab = zones.find((z) => z.id === 'laboratorio');
       if (!lab) throw new DataError(`${w}.zones: falta el Laboratorio`);
-      return lab.area;
+      return lab.rooms[0]!.rect;
     })(),
     radioTower: (() => {
       if (!('radioTower' in o)) return null;
       const tw = `${w}.radioTower`;
       const t = obj(o.radioTower, tw);
-      return { center: nums(t.center, 2, `${tw}.center`) as Point2, half: num(t, 'half', tw), leg: num(t, 'leg', tw), height: num(t, 'height', tw) };
+      return {
+        center: nums(t.center, 2, `${tw}.center`) as Point2,
+        half: num(t, 'half', tw),
+        leg: num(t, 'leg', tw),
+        height: num(t, 'height', tw),
+        base: num(t, 'base', tw, { min: -20, max: 20 }),
+      };
     })(),
     powerSwitch: fixture(o.powerSwitch, `${w}.powerSwitch`),
     perkStations: arr(o, 'perkStations', w).map((x, i) => ({
@@ -737,8 +820,8 @@ export interface GameConfig {
   jauria: JauriaConfig;
 }
 
-/** Mapas disponibles. «amplio» es una variante de prueba con más espacio libre (?mapa=amplio). */
-export const MAPS = { prototipo: rawMap, amplio: rawMapWide } as const;
+/** Mapas disponibles: por ahora, la Estación Aurora. */
+export const MAPS = { prototipo: rawMap } as const;
 export type MapName = keyof typeof MAPS;
 
 export function loadConfig(mapName: MapName = 'prototipo'): GameConfig {

@@ -244,7 +244,7 @@ describe('compras', () => {
     run(g, 1, () => ({ use: true, yaw: -Math.PI / 2 }));
     expect(g.player.points).toBe(250);
     expect(g.doors[0]!.open).toBe(true);
-    expect(labWindows()).toBe(2);
+    expect(labWindows()).toBe(3);
 
     run(g, seconds(1), () => ({ yaw: -Math.PI / 2, moveZ: 1 }));
     expect(g.player.pos.x).toBeGreaterThan(12.5);

@@ -36,19 +36,28 @@ export class Navigation {
   private readonly doorObstacles: Array<Obstacle | null> = [];
 
   constructor(map: MapConfig, maxAgents: number) {
-    // El suelo transitable: un rectángulo por zona, a y = 0, en dos triángulos.
+    // El suelo transitable: cada sala a su altura y cada rampa inclinada, en dos triángulos.
     const positions: number[] = [];
     const indices: number[] = [];
-    for (const [x0, z0, x1, z1] of map.navFloors) {
+    const quad = (a: number[], b: number[], c: number[], d: number[]) => {
       const base = positions.length / 3;
-      positions.push(x0, 0, z0, x1, 0, z0, x1, 0, z1, x0, 0, z1);
+      positions.push(...a, ...b, ...c, ...d);
       indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    };
+    for (const zone of map.zones) {
+      for (const { rect: [x0, z0, x1, z1], floor: y } of zone.rooms) quad([x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]);
+    }
+    for (const r of map.ramps) {
+      const [x0, z0, x1, z1] = r.rect;
+      // Las rampas se alargan un poco dentro de las salas para que no quede escalón en la unión.
+      if (r.axis === 'x') quad([x0, r.y0, z0], [x1, r.y1, z0], [x1, r.y1, z1], [x0, r.y0, z1]);
+      else quad([x0, r.y0, z0], [x1, r.y0, z0], [x1, r.y1, z1], [x0, r.y1, z1]);
     }
     // Todo lo sólido corta el suelo: muros, alféizares, bloques interiores, objetos y decorado.
     const solids: Box[] = [...map.walls, ...solidBoxes(map)];
     for (const w of map.windows) {
       const [x0, z0, x1, z1] = w.opening;
-      solids.push([x0, 0, z0, x1, map.windowTop, z1]);
+      solids.push([x0, Math.min(w.floorY, w.groundY), z0, x1, w.top, z1]);
     }
     for (const [x0, y0, z0, x1, y1, z1] of solids) {
       const base = positions.length / 3;
@@ -66,6 +75,7 @@ export class Navigation {
       walkableRadius: Math.ceil(AGENT_RADIUS / CELL),
       walkableHeight: Math.ceil(AGENT_HEIGHT / CELL_HEIGHT),
       walkableClimb: 3,
+      walkableSlopeAngle: 45,
       expectedLayersPerTile: 4,
       maxObstacles: Math.max(8, map.doors.length + 4),
     });

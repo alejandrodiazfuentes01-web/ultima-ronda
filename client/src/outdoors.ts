@@ -22,7 +22,10 @@ export class Snow {
   private readonly pos = new Float32Array(FLAKES * 3);
   private readonly phase = new Float32Array(FLAKES);
 
-  constructor(private readonly area: [number, number, number, number]) {
+  constructor(
+    private readonly area: [number, number, number, number],
+    private readonly base = 0,
+  ) {
     this.mesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(0.035, 0.035),
       new THREE.MeshBasicMaterial({ color: 0xeef3ff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }),
@@ -45,6 +48,7 @@ export class Snow {
       let y = this.pos[i * 3 + 1]! - FALL_SPEED * dt * (0.7 + (i % 5) * 0.12);
       if (y < 0) y += SNOW_TOP;
       this.pos[i * 3 + 1] = y;
+      y += this.base;
       const sway = Math.sin(time * 0.8 + this.phase[i]!) * 0.25;
       tmpP.set(this.pos[i * 3]! + sway, y, this.pos[i * 3 + 2]! + Math.cos(time * 0.6 + this.phase[i]!) * 0.2);
       tmpM.compose(tmpP, tmpQ, tmpS);
@@ -81,7 +85,7 @@ export class RadioTower {
         [1, 1],
         [-1, 1],
       ][i]!;
-      return new THREE.Vector3(cx + s[0]! * h, y, cz + s[1]! * h);
+      return new THREE.Vector3(cx + s[0]! * h, t.base + y, cz + s[1]! * h);
     };
     const parts: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 4; i++) parts.push(beam(corner(i, 0), corner(i, t.height), t.leg));
@@ -97,12 +101,12 @@ export class RadioTower {
       }
     }
     // Mástil y antena.
-    parts.push(beam(new THREE.Vector3(cx, t.height, cz), new THREE.Vector3(cx, t.height + 3, cz), 0.12));
+    parts.push(beam(new THREE.Vector3(cx, t.base + t.height, cz), new THREE.Vector3(cx, t.base + t.height + 3, cz), 0.12));
     const metal = new THREE.MeshStandardMaterial({ color: 0x5c6168, roughness: 0.6, metalness: 0.5 });
     this.root.add(new THREE.Mesh(mergeGeometries(parts, false)!, metal));
     for (const p of parts) p.dispose();
     this.beacon = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2a1a }));
-    this.beacon.position.set(cx, t.height + 3.2, cz);
+    this.beacon.position.set(cx, t.base + t.height + 3.2, cz);
     this.root.add(this.beacon);
   }
 

@@ -33,6 +33,8 @@ export const PLAYER_HEIGHT = 1.8;
 export const EYE_HEIGHT = 1.65;
 /** Margen que el controlador de personaje deja con el suelo y las paredes. La cápsula se coloca ya con él. */
 const KCC_OFFSET = 0.02;
+/** Grosor de la losa de una rampa. */
+const RAMP_THICKNESS = 0.3;
 /** Altura del centro de la cápsula sobre los pies. */
 const CAPSULE_CENTER = PLAYER_HEIGHT / 2 + KCC_OFFSET;
 
@@ -104,13 +106,30 @@ export class Physics {
     this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
     this.world.timestep = 1 / 60;
 
-    cuboid(this.world, map.floor, G_WORLD);
+    for (const g of map.grounds) cuboid(this.world, g, G_WORLD);
+    // Los muros ya incluyen alféizares y dinteles; el hueco de cada ventana frena solo al jugador.
     for (const wall of map.walls) cuboid(this.world, wall, G_WORLD);
     for (const w of map.windows) {
       const [x0, z0, x1, z1] = w.opening;
-      cuboid(this.world, [x0, 0, z0, x1, map.sillHeight, z1], G_WORLD);
-      cuboid(this.world, [x0, map.windowTop, z0, x1, map.wallHeight, z1], G_WORLD);
-      cuboid(this.world, [x0, map.sillHeight, z0, x1, map.windowTop, z1], G_WINDOW_BLOCK);
+      cuboid(this.world, [x0, w.sillTop, z0, x1, w.top, z1], G_WINDOW_BLOCK);
+    }
+    // Rampas y escaleras: una losa inclinada por la que se sube andando.
+    for (const r of map.ramps) {
+      const [x0, z0, x1, z1] = r.rect;
+      const run = r.axis === 'x' ? x1 - x0 : z1 - z0;
+      const across = r.axis === 'x' ? z1 - z0 : x1 - x0;
+      const angle = Math.atan2(r.y1 - r.y0, run);
+      const half = RAMP_THICKNESS / 2;
+      const len = Math.hypot(run, r.y1 - r.y0) / 2;
+      const desc = (r.axis === 'x' ? RAPIER.ColliderDesc.cuboid(len, half, across / 2) : RAPIER.ColliderDesc.cuboid(across / 2, half, len))
+        .setTranslation((x0 + x1) / 2, (r.y0 + r.y1) / 2 - half / Math.cos(angle), (z0 + z1) / 2)
+        .setRotation(
+          r.axis === 'x'
+            ? { x: 0, y: 0, z: Math.sin(angle / 2), w: Math.cos(angle / 2) }
+            : { x: Math.sin(-angle / 2), y: 0, z: 0, w: Math.cos(-angle / 2) },
+        )
+        .setCollisionGroups(G_WORLD);
+      this.world.createCollider(desc);
     }
     for (const d of map.doors) this.doorColliders.push(cuboid(this.world, d.box, G_WORLD));
     for (const b of solidBoxes(map)) cuboid(this.world, b, G_WORLD);
@@ -125,6 +144,9 @@ export class Physics {
     );
     this.controller = this.world.createCharacterController(KCC_OFFSET);
     this.controller.enableSnapToGround(0.3);
+    // Se sube por escaleras y rampas; las pendientes de más de 45° no se pueden subir.
+    this.controller.setMaxSlopeClimbAngle((45 * Math.PI) / 180);
+    this.controller.setMinSlopeSlideAngle((50 * Math.PI) / 180);
     this.controller.setApplyImpulsesToDynamicBodies(false);
 
     // Reserva fija de cuerpos de enemigo (regla 5): se encienden y apagan, nunca se crean en plena horda.
