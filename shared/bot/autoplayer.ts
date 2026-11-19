@@ -40,6 +40,8 @@ export interface BotOptions {
   rounds: number;
   seed?: number;
   damageScale?: number;
+  /** Abre todo el mapa al empezar: los Vacíos llegan desde todas las zonas. */
+  openAll?: boolean;
 }
 
 export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
@@ -54,6 +56,7 @@ export function runBot(cfg: GameConfig, opts: BotOptions): BotReport {
   const [ax, az] = cfg.map.doors[0]!.anchors[0]!;
   const post = { x: ax - POST_BEFORE_DOOR, z: az };
   game.teleportPlayer(post.x, post.z);
+  if (opts.openAll) cfg.map.doors.forEach((_, i) => game.unlockDoor(i));
 
   const maxTicks = Math.round((opts.rounds * (MAX_ROUND_SECONDS + cfg.rounds.breakSeconds)) / SIM_DT);
   try {

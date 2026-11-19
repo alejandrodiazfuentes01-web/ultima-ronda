@@ -69,12 +69,13 @@ const out = {
   wallBuys: m.wallBuys.map((b) => ({ ...b, anchor: pt(b.anchor) })),
   playerStart: { ...m.playerStart, position: [r3(fx(sx)), sy, r3(fz(sz))] },
   navFloors: m.navFloors.map(rect),
-  labArea: rect(m.labArea),
   powerSwitch: fix(m.powerSwitch),
   perkStations: m.perkStations.map(fix),
   forja: fix(m.forja),
   contenedorSpots: m.contenedorSpots.map(fix),
   decor: m.decor.map((d) => ({ ...d, box: box(d.box) })),
+  zones: m.zones.map((z) => ({ ...z, area: rect(z.area), lights: z.lights.map(pt) })),
+  ...(m.radioTower ? { radioTower: { ...m.radioTower, center: pt(m.radioTower.center) } } : {}),
 };
 writeFileSync(DST, `${JSON.stringify(out, null, 2)}\n`);
 console.log('líneas x:', [...xs].sort((a, b) => a - b), '\nlíneas z:', [...zs].sort((a, b) => a - b));

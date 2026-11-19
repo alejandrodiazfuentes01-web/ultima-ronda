@@ -175,7 +175,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Segundo aliento | En solitario funciona sin energía. Al caer, te levantas solo a los 5 s, sin recibir daño mientras tanto y con la M1911 en la mano. Pierdes todos los sueros, él incluido. Tres veces por partida; después su estación se apaga. Mientras estás caído, los Vacíos se alejan hacia la ventana más lejana, y al levantarte tienes 3 s sin recibir daño |
 | Caer sin Segundo aliento | Fin de la partida en solitario. El desangrado de 45 s queda para el cooperativo |
 | Coraza | Necesita energía. Vida máxima × 2 |
-| El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, AK-74, M16, Mk 17, M249, SVD y Arco voltaico. El AK-74 y el M16 están ahí de forma provisional, hasta que existan el Almacén y el Patio con sus taquillas |
+| El Contenedor | Gira 4 s y el arma queda 10 s para cogerla. No repite un arma que ya llevas. Se traslada tras entre 4 y 8 usos, al azar, y tarda 15 s en aparecer en el otro hueco. Armas: SMG-5, Mk 17, M249, SVD y Arco voltaico |
 | La Forja | Daño × 2, cargador y reserva × 1,5 y munición llena. Efecto: cada baja con el arma mejorada suelta una onda de ceniza que quita a los enemigos a menos de 3 m la mitad de la vida de la ronda. Tarda 5 s; el arma se recoge en la máquina. Mientras solo haya un efecto, no se puede repetir la mejora |
 | Power-ups | 2 % por baja, máximo 4 por ronda. Se recogen a menos de 1,3 m. Duran 30 s en el suelo y parpadean los últimos 5. Baja instantánea y Puntos dobles duran 30 s. Onda expansiva elimina a todos los enemigos vivos y da 400 puntos, sin puntos por cada baja |
 | Mk 17 | Reserva 120, recarga 2,6 s |
@@ -187,7 +187,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Caído | Se puede arrastrar a 1 m/s, sin esprintar ni saltar, disparando con la M1911 |
 | Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío va hasta un 15 % más lento que la velocidad de la ronda (nunca más rápido) y se balancea hasta 1 m a los lados con su propio ritmo; a menos de 1,5 m va directo. Aceleración 8 m/s²: se mueven con peso, sin lanzarse ni empujarse a tirones. Ajustado el 2026-11-12 tras las primeras pruebas |
 
-En el Laboratorio del vertical slice están, de forma provisional, el interruptor de energía, La Forja y dos huecos de El Contenedor. Segundo aliento está en el Vestíbulo y Coraza en el Laboratorio, como en el mapa de lanzamiento.
+Desde el 2026-11-19 la Estación Aurora está completa, con sus seis zonas (ver «Diseño del mapa de lanzamiento»), y cada compra está en su zona: el interruptor de energía y Doble filo en la Sala de energía, La Forja en la Torre de radio, Pulso y el M16 en el Patio, el AK-74 y el primer hueco de El Contenedor en el Almacén.
 
 La Jauría y los dos sueros que faltaban, añadidos el 2026-11-18 a petición de Alejandro. Los valores viven en `jauria.json` y `perks.json`:
 
@@ -201,7 +201,7 @@ La Jauría y los dos sueros que faltaban, añadidos el 2026-11-18 a petición de
 | Pulso | 3.000 puntos, necesita energía. Recarga en la mitad de tiempo, también cada cartucho de la escopeta |
 | Doble filo | 2.000 puntos, necesita energía. Dispara un 33 % más rápido, también las ráfagas |
 
-En el vertical slice, Pulso y Doble filo están de forma provisional en el Laboratorio, hasta que existan el Patio y la Sala de energía. Sus estaciones usan los modelos de las otras dos, teñidos con su color.
+Las estaciones de Pulso y Doble filo usan los modelos de las otras dos, teñidos con su color.
 
 Manejo de las armas, añadido el 2026-11-17 a petición de Alejandro para acercar la sensación de disparo a la del género. Con él llegan antes de tiempo las cuatro armas de pared que faltaban (M870 y SMG-5 en el Vestíbulo, V-45 en el Laboratorio; AK-74 y M16 en El Contenedor hasta que existan sus zonas). Los valores viven en `weapons.json` y `handling.json`:
 
@@ -309,6 +309,16 @@ Reglas de construcción del nivel:
 3. El Contenedor tiene cuatro posiciones posibles, una por zona no inicial salvo la sala de energía.
 4. La geometría es modular: piezas de 4 × 4 m que encajan. Un mapa nuevo se monta con las mismas piezas.
 5. El nivel se prueba primero en cajas grises. No se hace arte hasta que el flujo divierte.
+
+Cómo está construido (2026-11-19):
+
+- Cuadrícula de 36 × 26 m: la fila norte mide 12 m de fondo y la sur 14. Muros de 3,2 m.
+- Ventanas: cuatro en el Vestíbulo, dos en el Laboratorio, dos en la Sala de energía, tres en el Almacén, dos en el Patio y tres en la Torre.
+- Bloques que se rodean para mover la horda: el central del Laboratorio, una estantería en el Almacén, un contenedor de carga en el Patio y dos transformadores en la Sala de energía.
+- El Patio y la Torre de radio están al aire libre, con nieve; la torre de celosía mide 18 m y se ve por encima de los muros.
+- Sin energía, las zonas cerradas tienen luz roja de emergencia; al encenderla, luz blanca.
+- Una compuerta cerrada corta el paso a los Vacíos: no pueden cruzarla ni atajar por una zona cerrada.
+- Para que vaya fluido, solo se dibujan la zona del jugador y las que se ven por compuertas abiertas.
 
 Ritmo esperado de una partida media: energía encendida en las rondas 5–7, primera mejora en La Forja en las rondas 10–12, mapa abierto del todo hacia la 12.
 

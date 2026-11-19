@@ -195,3 +195,64 @@ export function bulletHoleTexture(): THREE.CanvasTexture {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
+/** Hormigón con manchas y alguna junta de encofrado. `tone` es el gris base (0–255). Cubre 2 × 2 m. */
+export function concreteTexture(tone: number, seed: number): THREE.CanvasTexture {
+  const size = 256;
+  const [c, g] = canvas(size);
+  const rand = seeded(seed);
+  g.fillStyle = `rgb(${tone},${tone - 2},${tone - 6})`;
+  g.fillRect(0, 0, size, size);
+  for (let i = 0; i < 1800; i++) {
+    const v = rand() < 0.5 ? 255 : 0;
+    g.fillStyle = `rgba(${v},${v},${v},${0.03 + rand() * 0.05})`;
+    g.fillRect(rand() * size, rand() * size, 1 + rand() * 4, 1 + rand() * 4);
+  }
+  grime(g, size, rand, 10, 'rgba(40,38,34,0.3)');
+  g.strokeStyle = 'rgba(30,30,28,0.35)';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(0, size / 2);
+  g.lineTo(size, size / 2);
+  g.stroke();
+  return toTexture(c);
+}
+
+/** Chapa ondulada de almacén, en vertical, con óxido abajo. Cubre 2 × 2 m. */
+export function corrugatedTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [c, g] = canvas(size);
+  const rand = seeded(23);
+  const ridges = 16;
+  for (let i = 0; i < ridges; i++) {
+    const grad = g.createLinearGradient((i * size) / ridges, 0, ((i + 1) * size) / ridges, 0);
+    grad.addColorStop(0, '#5f6a70');
+    grad.addColorStop(0.5, '#8b979c');
+    grad.addColorStop(1, '#55605f');
+    g.fillStyle = grad;
+    g.fillRect((i * size) / ridges, 0, size / ridges + 1, size);
+  }
+  const rust = g.createLinearGradient(0, size * 0.6, 0, size);
+  rust.addColorStop(0, 'rgba(120,70,35,0)');
+  rust.addColorStop(1, 'rgba(120,70,35,0.55)');
+  g.fillStyle = rust;
+  g.fillRect(0, 0, size, size);
+  grime(g, size, rand, 12, 'rgba(90,55,30,0.3)');
+  return toTexture(c);
+}
+
+/** Nieve pisada, con algo de hielo y huellas sucias. Cubre 2 × 2 m. */
+export function snowTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const [c, g] = canvas(size);
+  const rand = seeded(31);
+  g.fillStyle = '#d6dde4';
+  g.fillRect(0, 0, size, size);
+  for (let i = 0; i < 2600; i++) {
+    const v = 190 + Math.floor(rand() * 65);
+    g.fillStyle = `rgba(${v},${v + 4},${v + 10},0.5)`;
+    g.fillRect(rand() * size, rand() * size, 1 + rand() * 3, 1 + rand() * 3);
+  }
+  grime(g, size, rand, 8, 'rgba(120,130,140,0.25)');
+  return toTexture(c);
+}
