@@ -185,7 +185,7 @@ Valores de partida añadidos al empezar la fase 2:
 | Movimiento | Inercia: se acelera a 30 m/s² y se frena a 40 m/s² (unas décimas para arrancar y parar) |
 | Sprint | Dura 4 s seguidos; se recupera en 3 s tras 0,8 s sin esprintar; hace falta un 25 % para volver a empezar. Esprintando no se dispara, y tras parar hay 0,25 s de espera |
 | Caído | Se puede arrastrar a 1 m/s, sin esprintar ni saltar, disparando con la M1911 |
-| Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío va hasta un 15 % más lento que la velocidad de la ronda (nunca más rápido) y se balancea hasta 1 m a los lados con su propio ritmo; a menos de 1,5 m va directo. Aceleración 8 m/s²: se mueven con peso, sin lanzarse ni empujarse a tirones. Ajustado el 2026-11-12 tras las primeras pruebas |
+| Horda | Van en piña y son sólidos: el jugador no puede pasar entre dos que estén juntos. Para que no formen fila, cada Vacío va hasta un 15 % más lento que la velocidad de la ronda (nunca más rápido) y se balancea hasta 1 m a los lados con su propio ritmo; a menos de 1,5 m va directo. Aceleración 8 m/s²: se mueven con peso, sin lanzarse ni empujarse a tirones. Ajustado el 2026-11-12 tras las primeras pruebas. El 2026-11-19, más apiñados (Alejandro los veía demasiado separados): cada uno ocupa el ancho de su cuerpo, se apartan poco entre sí; entre vecinos queda poco más de medio metro |
 
 Desde el 2026-11-19 la Estación Aurora está completa, con sus seis zonas (ver «Diseño del mapa de lanzamiento»), y cada compra está en su zona: el interruptor de energía y Doble filo en la Sala de energía, La Forja en la Torre de radio, Pulso y el M16 en el Patio, el AK-74 y el primer hueco de El Contenedor en el Almacén.
 
