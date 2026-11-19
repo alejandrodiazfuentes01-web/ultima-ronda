@@ -16,6 +16,7 @@ import { ENEMY_MODEL, PACK_MODEL } from './enemies';
 import { Input } from './input';
 import { loadModels } from './models';
 import { PerfMeter } from './perf';
+import { DynamicResolution } from './resolution';
 import { PlayStats } from './stats';
 import { summaryText } from './statsView';
 import { Tutorial, type TutorialView } from './tutorial';
@@ -58,7 +59,9 @@ async function start(): Promise<void> {
   const testing = params.has('pruebas');
   let stats = new PlayStats();
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  /** Resolución completa: los píxeles de pantalla, con un tope de 2 por píxel. */
+  const fullPixelRatio = () => Math.min(window.devicePixelRatio, 2);
+  renderer.setPixelRatio(fullPixelRatio());
   renderer.setSize(window.innerWidth, window.innerHeight, false);
 
   // Mapa de prueba con más espacio: ?mapa=amplio. Sin parámetro, el normal.
@@ -74,7 +77,9 @@ async function start(): Promise<void> {
     .filter((n): n is string => !!n);
   await loadModels([...modelNames, ENEMY_MODEL, PACK_MODEL]);
   const view = new GameView(cfg.map, cfg.rounds.aliveCap.max);
+  const dynamicResolution = new DynamicResolution(fullPixelRatio, (ratio) => renderer.setPixelRatio(ratio));
   const resize = () => {
+    renderer.setPixelRatio(fullPixelRatio() * dynamicResolution.fraction);
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     view.resize(window.innerWidth, window.innerHeight);
   };
@@ -180,6 +185,8 @@ async function start(): Promise<void> {
     }
   });
 
+  // Todo preparado antes de poder jugar: así no hay tirones la primera vez que algo entra en pantalla.
+  await view.warmUp(renderer);
   playButton.textContent = t('menu.play');
   playButton.disabled = false;
   setState('menu');
@@ -230,6 +237,7 @@ async function start(): Promise<void> {
     view.render(renderer);
     const info = renderer.info.render as { drawCalls?: number; calls?: number; triangles?: number };
     perf.frame(frameSeconds, info.drawCalls ?? info.calls ?? 0, info.triangles ?? 0);
+    if (state === 'playing') dynamicResolution.frame(frameSeconds);
   });
 }
 
