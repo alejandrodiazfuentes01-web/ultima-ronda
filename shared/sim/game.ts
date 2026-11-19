@@ -1218,7 +1218,8 @@ export class Game {
       e.speed = jc.speed * (1 - this.rng.next() * jc.speedVariation);
     } else {
       e.health = enemyHealth(round, this.cfg.rounds);
-      e.speed = enemySpeed(round, this.cfg.enemies) * (1 - this.rng.next() * hd.speedVariation);
+      // Como en el género, cada uno elige al aparecer si anda, corre o esprinta; cada ronda hay más rápidos.
+      e.speed = enemySpeed(round, this.cfg.enemies, this.rng.next()) * (1 - this.rng.next() * hd.speedVariation);
     }
     e.lead = this.rng.next() * hd.leadSecondsMax;
     e.sway = this.rng.next() * hd.swayMeters;

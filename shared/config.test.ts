@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import rawPlayer from './data/player.json';
 import rawWeapons from './data/weapons.json';
 import rawMap from './data/maps/prototipo.json';
-import { enemySpeed, loadConfig, parseMap, parsePlayer, parseWeapons, zoneAt } from './config';
+import { gaitShares, loadConfig, parseMap, parsePlayer, parseWeapons, zoneAt } from './config';
 
 const cfg = loadConfig();
 
@@ -28,13 +28,21 @@ describe('datos de balance', () => {
     expect(hits).toBe(3);
   });
 
-  it('velocidad del enemigo: anda hasta la 3, corre desde la 4, esprinta desde la 12', () => {
-    expect(enemySpeed(1, cfg.enemies)).toBe(1.5);
-    expect(enemySpeed(3, cfg.enemies)).toBe(1.5);
-    expect(enemySpeed(4, cfg.enemies)).toBe(4);
-    expect(enemySpeed(11, cfg.enemies)).toBe(4);
-    expect(enemySpeed(12, cfg.enemies)).toBe(6);
-    expect(enemySpeed(40, cfg.enemies)).toBeLessThan(cfg.player.sprintSpeed);
+  it('forma de moverse: al principio todos andan; cada ronda hay más que corren y luego esprintan, mezclados', () => {
+    const e = cfg.enemies;
+    expect(gaitShares(1, e)).toEqual({ walk: 1, run: 0, sprint: 0 });
+    // Rondas 2–4: empiezan a mezclarse los que corren; en la 4, la mitad.
+    expect(gaitShares(2, e).run).toBeGreaterThan(0.1);
+    expect(gaitShares(2, e).walk).toBeGreaterThan(0.75);
+    expect(gaitShares(4, e).run).toBeGreaterThan(0.4);
+    expect(gaitShares(4, e).run).toBeLessThan(0.6);
+    expect(gaitShares(6, e).sprint).toBe(0);
+    // Hacia la 8, los primeros que esprintan; desde la 13, todos.
+    expect(gaitShares(8, e).sprint).toBeGreaterThan(0);
+    expect(gaitShares(8, e).sprint).toBeLessThan(0.3);
+    expect(gaitShares(13, e).sprint).toBe(1);
+    // Siempre algo más lentos que el esprint del jugador.
+    expect(e.gaits.sprint).toBeLessThan(cfg.player.sprintSpeed);
   });
 
   it('el mapa: vestíbulo con 4 ventanas, laboratorio con 3, puerta de 750 y SMG-5 de 750', () => {

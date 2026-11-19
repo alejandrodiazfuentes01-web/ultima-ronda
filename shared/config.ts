@@ -118,7 +118,14 @@ export interface EnemiesConfig {
   attackRange: number;
   plankTearSeconds: number;
   climbSeconds: number;
-  speedTiers: Array<{ fromRound: number; speed: number }>;
+  /** Velocidad de cada forma de moverse: andar, correr y esprintar. */
+  gaits: { walk: number; run: number; sprint: number };
+  /**
+   * Cómo elige cada Vacío su forma de moverse, como en el género: al aparecer saca un
+   * número entre (ronda − 1) × perRound y eso más spread; por encima de runAbove corre,
+   * por encima de sprintAbove esprinta. Así, cada ronda hay más rápidos, mezclados con lentos.
+   */
+  gaitMix: { perRound: number; spread: number; runAbove: number; sprintAbove: number };
   /** Cómo se agrupa la horda: cuánto se apartan entre sí y a qué distancia se tienen en cuenta. */
   horde: {
     separationWeight: number;
@@ -139,24 +146,24 @@ export interface EnemiesConfig {
 export function parseEnemies(raw: unknown): EnemiesConfig {
   const w = 'enemies.json';
   const o = obj(raw, w);
-  const tiers = arr(o, 'speedTiers', w).map((t, i) => {
-    const to = obj(t, `${w}.speedTiers[${i}]`);
-    return {
-      fromRound: num(to, 'fromRound', `${w}.speedTiers[${i}]`, { int: true, min: 1 }),
-      speed: num(to, 'speed', `${w}.speedTiers[${i}]`),
-    };
-  });
-  if (tiers[0]?.fromRound !== 1) throw new DataError(`${w}.speedTiers: el primer tramo debe empezar en la ronda 1`);
-  for (let i = 1; i < tiers.length; i++) {
-    if (tiers[i]!.fromRound <= tiers[i - 1]!.fromRound) throw new DataError(`${w}.speedTiers: las rondas deben ir en orden`);
-  }
+  const gw = `${w}.gaits`;
+  const g = obj(o.gaits, gw);
+  const mw = `${w}.gaitMix`;
+  const m = obj(o.gaitMix, mw);
+  const runAbove = num(m, 'runAbove', mw);
   return {
     hitDamage: num(o, 'hitDamage', w),
     attackIntervalSeconds: num(o, 'attackIntervalSeconds', w),
     attackRange: num(o, 'attackRange', w),
     plankTearSeconds: num(o, 'plankTearSeconds', w),
     climbSeconds: num(o, 'climbSeconds', w),
-    speedTiers: tiers,
+    gaits: { walk: num(g, 'walk', gw), run: num(g, 'run', gw), sprint: num(g, 'sprint', gw) },
+    gaitMix: {
+      perRound: num(m, 'perRound', mw, { allowZero: true }),
+      spread: num(m, 'spread', mw, { allowZero: true }),
+      runAbove,
+      sprintAbove: num(m, 'sprintAbove', mw, { min: runAbove }),
+    },
     horde: (() => {
       const hw = `${w}.horde`;
       const h = obj(o.horde, hw);
@@ -851,10 +858,26 @@ export function loadConfig(mapName: MapName = 'prototipo'): GameConfig {
 }
 
 /** Velocidad del enemigo en una ronda, según los tramos de enemies.json. */
-export function enemySpeed(round: number, cfg: EnemiesConfig): number {
-  let speed = cfg.speedTiers[0]!.speed;
-  for (const t of cfg.speedTiers) if (round >= t.fromRound) speed = t.speed;
-  return speed;
+export type Gait = 'walk' | 'run' | 'sprint';
+
+/** Forma de moverse de un Vacío que aparece en la ronda dada; `roll` es un número al azar en [0, 1). */
+export function enemyGait(round: number, cfg: EnemiesConfig, roll: number): Gait {
+  const m = cfg.gaitMix;
+  const value = (round - 1) * m.perRound + roll * m.spread;
+  return value > m.sprintAbove ? 'sprint' : value > m.runAbove ? 'run' : 'walk';
+}
+
+/** Velocidad de un Vacío que aparece en la ronda dada; `roll` es un número al azar en [0, 1). */
+export function enemySpeed(round: number, cfg: EnemiesConfig, roll: number): number {
+  return cfg.gaits[enemyGait(round, cfg, roll)];
+}
+
+/** Parte de los Vacíos de una ronda que andan, corren y esprintan. */
+export function gaitShares(round: number, cfg: EnemiesConfig): Record<Gait, number> {
+  const out = { walk: 0, run: 0, sprint: 0 };
+  const n = 1000;
+  for (let i = 0; i < n; i++) out[enemyGait(round, cfg, (i + 0.5) / n)]++;
+  return { walk: out.walk / n, run: out.run / n, sprint: out.sprint / n };
 }
 
 export type { Obj };

@@ -4,20 +4,17 @@
   "attackRange": 1.4,
   "plankTearSeconds": 1.5,
   "climbSeconds": 1,
-  "speedTiers": [
-    {
-      "fromRound": 1,
-      "speed": 1.5
-    },
-    {
-      "fromRound": 4,
-      "speed": 4
-    },
-    {
-      "fromRound": 12,
-      "speed": 6
-    }
-  ],
+  "gaits": {
+    "walk": 1.5,
+    "run": 4,
+    "sprint": 6
+  },
+  "gaitMix": {
+    "perRound": 6,
+    "spread": 35,
+    "runAbove": 35,
+    "sprintAbove": 70
+  },
   "horde": {
     "separationWeight": 0.5,
     "collisionQueryRange": 1.5,

@@ -494,8 +494,8 @@ describe('herramientas de prueba', () => {
     expect(g.player.points).toBe(5000);
     const e = g.spawnEnemy(0)!;
     expect(e.health).toBe(850);
-    expect(e.speed).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9); // velocidad de la ronda ± la de cada Vacío
-    expect(e.speed).toBeLessThanOrEqual(4 + 1e-9); // nunca más rápido que la velocidad de la ronda
+    expect(e.speed).toBeGreaterThanOrEqual(1.5 * 0.85 - 1e-9); // anda, corre o esprinta, hasta un 15 % más lento
+    expect(e.speed).toBeLessThanOrEqual(6 + 1e-9);
   });
 });
 
@@ -540,7 +540,7 @@ describe('la horda', () => {
 });
 
 describe('la horda no va en fila', () => {
-  it('al huir en línea recta no forman fila: de media, menos de dos y medio en la misma línea de tiro', () => {
+  it('al huir en línea recta no forman fila: de media, menos de tres en la misma línea de tiro', () => {
     let inLine = 0;
     let samples = 0;
     for (let seed = 1; seed <= 3; seed++) {
@@ -576,19 +576,23 @@ describe('la horda no va en fila', () => {
       g.free();
       games.splice(games.indexOf(g), 1);
     }
-    // Apiñados, a veces caen dos o tres en la misma línea; en fila serían cinco o más.
-    expect(inLine / samples).toBeLessThan(2.5);
+    // Apiñados y con velocidades mezcladas, a veces caen dos o tres en la misma línea; en fila serían cinco o más.
+    expect(inLine / samples).toBeLessThan(3);
   });
 
-  it('cada Vacío tiene su propia velocidad: hasta un 15 % más lento, nunca más rápido', () => {
+  it('cada Vacío tiene su propia velocidad: anda, corre o esprinta, hasta un 15 % más lento, nunca más rápido', () => {
     const g = newGame();
     g.round.number = 5;
     const speeds = Array.from({ length: 12 }, () => g.spawnEnemy(0)!.speed);
     expect(new Set(speeds.map((v) => v.toFixed(3))).size).toBeGreaterThan(6);
+    const { walk, run, sprint } = g.cfg.enemies.gaits;
     for (const v of speeds) {
-      expect(v).toBeGreaterThanOrEqual(4 * 0.85 - 1e-9);
-      expect(v).toBeLessThanOrEqual(4 + 1e-9); // nunca más rápido que la velocidad de la ronda
+      const fits = [walk, run, sprint].some((base) => v >= base * 0.85 - 1e-9 && v <= base + 1e-9);
+      expect(fits, String(v)).toBe(true);
     }
+    // En la ronda 5 hay de los que andan y de los que corren.
+    expect(speeds.some((v) => v <= walk)).toBe(true);
+    expect(speeds.some((v) => v > walk)).toBe(true);
   });
 });
 
