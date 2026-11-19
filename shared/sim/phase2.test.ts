@@ -500,7 +500,7 @@ describe('herramientas de prueba', () => {
 });
 
 describe('la horda', () => {
-  it('se agrupa en piña: el hueco medio entre vecinos (menos de 0,9 m entre centros) es mucho menor que el jugador', () => {
+  it('va apiñada, hombro con hombro: menos de 0,7 m entre centros de vecinos', () => {
     const g = newGame();
     g.round.number = 6;
     g.teleportPlayer(6, 6);
@@ -519,8 +519,8 @@ describe('la horda', () => {
         }
       }
     }
-    // Cuerpos de 0,7 m: menos de 0,9 m entre centros deja huecos de menos de 20 cm.
-    expect(sum / n).toBeLessThan(0.9);
+    // Los Vacíos son delgados (medio metro de ancho): a menos de 0,7 m casi se tocan.
+    expect(sum / n).toBeLessThan(0.7);
   });
 
   it('no se puede pasar entre dos Vacíos que están juntos', () => {
@@ -540,7 +540,7 @@ describe('la horda', () => {
 });
 
 describe('la horda no va en fila', () => {
-  it('al huir en línea recta, rara vez hay más de uno y medio en la misma línea de tiro', () => {
+  it('al huir en línea recta no forman fila: de media, menos de dos en la misma línea de tiro', () => {
     let inLine = 0;
     let samples = 0;
     for (let seed = 1; seed <= 3; seed++) {
@@ -576,7 +576,8 @@ describe('la horda no va en fila', () => {
       g.free();
       games.splice(games.indexOf(g), 1);
     }
-    expect(inLine / samples).toBeLessThan(1.8);
+    // Apiñados, a veces caen dos en la misma línea; en fila serían cinco o más.
+    expect(inLine / samples).toBeLessThan(2);
   });
 
   it('cada Vacío tiene su propia velocidad: hasta un 15 % más lento, nunca más rápido', () => {

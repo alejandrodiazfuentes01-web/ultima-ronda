@@ -19,8 +19,8 @@
     }
   ],
   "horde": {
-    "separationWeight": 2,
-    "collisionQueryRange": 2.5,
+    "separationWeight": 0.5,
+    "collisionQueryRange": 1.5,
     "speedVariation": 0.15,
     "leadSecondsMax": 0,
     "swayMeters": 1,

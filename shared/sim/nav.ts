@@ -15,6 +15,11 @@ import type { Vec3 } from './types';
 
 /** Medidas del agente y de la malla (geometría, no balance). */
 export const AGENT_RADIUS = 0.35;
+/**
+ * Hueco que ocupa cada Vacío en la multitud: más estrecho que el margen de la malla,
+ * para que vayan apiñados hombro con hombro, como sus cuerpos delgados.
+ */
+const CROWD_RADIUS = 0.22;
 const AGENT_HEIGHT = 1.8;
 const CELL = 0.1;
 const CELL_HEIGHT = 0.1;
@@ -106,7 +111,7 @@ export class Navigation {
 
   addAgent(p: Vec3, speed: number, horde: { separationWeight: number; collisionQueryRange: number; maxAcceleration: number }): CrowdAgent {
     return this.crowd.addAgent(this.closest(p), {
-      radius: AGENT_RADIUS,
+      radius: CROWD_RADIUS,
       height: AGENT_HEIGHT,
       maxSpeed: speed,
       maxAcceleration: horde.maxAcceleration,
