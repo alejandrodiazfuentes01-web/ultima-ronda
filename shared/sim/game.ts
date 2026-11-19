@@ -839,13 +839,22 @@ export class Game {
   private openDoor(i: number): void {
     const d = this.cfg.map.doors[i]!;
     if (this.doors[i]!.open || !this.pay(d.cost)) return;
+    this.unlockDoor(i);
+    this.events.push({ type: 'purchase', what: 'door', id: d.id });
+  }
+
+  /** Abre una compuerta sin cobrarla (pruebas y jugador automático). */
+  unlockDoor(i: number): void {
+    const d = this.cfg.map.doors[i]!;
+    if (this.doors[i]!.open) return;
     this.doors[i]!.open = true;
     this.physics.openDoor(i);
-    this.openZones.add(d.opensZone);
+    this.nav.openDoor(i);
+    // Se abren las dos zonas que une (una ya lo estaba) y sus ventanas empiezan a recibir enemigos.
+    for (const z of d.connects) this.openZones.add(z);
     this.cfg.map.windows.forEach((w, wi) => {
-      if (w.zone === d.opensZone) this.windows[wi]!.active = true;
+      if (this.openZones.has(w.zone)) this.windows[wi]!.active = true;
     });
-    this.events.push({ type: 'purchase', what: 'door', id: d.id });
   }
 
   // ------------------------------------------------------------------ energía y sueros

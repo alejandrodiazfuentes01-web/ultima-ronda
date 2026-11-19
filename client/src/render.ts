@@ -1,18 +1,22 @@
 /**
- * Dibuja la partida: el Vestíbulo en cajas grises y el Laboratorio con su arte. Solo lee el estado de la simulación e
- * interpola entre el paso anterior y el actual (regla 2).
- * Escenario en una sola malla; enemigos y planchas en mallas instanciadas
- * de tamaño fijo (regla 5): pocas llamadas de dibujo y nada se crea en plena horda.
+ * Dibuja la partida: las seis zonas de la Estación Aurora, cada una con su aspecto.
+ * Solo lee el estado de la simulación e interpola entre el paso anterior y el actual (regla 2).
+ *
+ * Cada zona es un grupo con su suelo, sus muros y su techo en pocas mallas. Solo se
+ * dibujan la zona del jugador y las que se ven desde ella por compuertas abiertas;
+ * las demás quedan tras muros o compuertas cerradas y no cuestan nada.
+ * Enemigos y planchas van en mallas de tamaño fijo (regla 5).
  */
 import * as THREE from 'three/webgpu';
-import type { Box, MapConfig } from '../../shared/config';
+import { zoneAt, type Box, type MapConfig, type ZoneDef } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { EYE_HEIGHT } from '../../shared/sim/physics';
 import type { SimEvent } from '../../shared/sim/types';
 import { EnemyViews } from './enemies';
 import { Effects } from './effects';
 import { Props } from './props';
-import { labFloorTexture, labWallTexture } from './textures';
+import { concreteTexture, corrugatedTexture, labFloorTexture, labWallTexture, snowTexture } from './textures';
+import { RadioTower, Snow } from './outdoors';
 import { Viewmodel } from './viewmodel';
 import { buildWeapon } from './weapons/build';
 
@@ -76,20 +80,37 @@ function boxesGeometry(boxes: Box[]): THREE.BufferGeometry {
   return out;
 }
 
-/** Parte las cajas que cruzan el límite del Laboratorio: [vestíbulo, laboratorio]. */
-function splitAtLab(boxes: Box[], labX: number): [Box[], Box[]] {
-  const LAB_X = labX;
-  const left: Box[] = [];
-  const right: Box[] = [];
-  for (const b of boxes) {
-    if (b[3] <= LAB_X) left.push(b);
-    else if (b[0] >= LAB_X - 0.2) right.push(b);
-    else {
-      left.push([b[0], b[1], b[2], LAB_X - 0.2, b[4], b[5]]);
-      right.push([LAB_X - 0.2, b[1], b[2], b[3], b[4], b[5]]);
-    }
+/**
+ * Recorta una caja al rectángulo de una zona, o null si no lo toca. Los muros entre
+ * dos zonas quedan partidos por la mitad: cada cara tiene el aspecto de su zona.
+ */
+function clipToZone(b: Box, r: [number, number, number, number]): Box | null {
+  const x0 = Math.max(b[0], r[0]);
+  const z0 = Math.max(b[2], r[1]);
+  const x1 = Math.min(b[3], r[2]);
+  const z1 = Math.min(b[5], r[3]);
+  if (x1 - x0 < 0.001 || z1 - z0 < 0.001) return null;
+  return [x0, b[1], z0, x1, b[4], z1];
+}
+
+/** Aspecto de cada zona: muros, suelo y techo (materiales sencillos: hay muchas luces por zona). */
+function zoneLook(id: string): { wall: THREE.Material; floor: THREE.Material; ceiling: THREE.Material } {
+  const lambert = (o: { map?: THREE.Texture; color?: number }) => new THREE.MeshLambertMaterial(o);
+  const ceiling = lambert({ map: concreteTexture(70, 5) });
+  switch (id) {
+    case 'laboratorio':
+      return { wall: new THREE.MeshStandardMaterial({ map: labWallTexture(), roughness: 0.75, metalness: 0.15 }), floor: lambert({ map: labFloorTexture() }), ceiling };
+    case 'energia':
+      return { wall: lambert({ map: labWallTexture(), color: 0x8a97b0 }), floor: lambert({ map: concreteTexture(88, 9), color: 0x9aa3b0 }), ceiling };
+    case 'almacen':
+      return { wall: lambert({ map: corrugatedTexture() }), floor: lambert({ map: concreteTexture(120, 13) }), ceiling };
+    case 'patio':
+      return { wall: lambert({ map: concreteTexture(132, 17), color: 0xc7ccd4 }), floor: lambert({ map: snowTexture() }), ceiling };
+    case 'torre':
+      return { wall: lambert({ map: concreteTexture(150, 21) }), floor: lambert({ map: concreteTexture(100, 25) }), ceiling };
+    default:
+      return { wall: lambert({ color: COLORS.wall }), floor: lambert({ map: concreteTexture(105, 29) }), ceiling };
   }
-  return [left, right];
 }
 
 /** Ancho de cada plancha metálica en metros (aspecto, no balance). */
@@ -133,6 +154,11 @@ export class GameView {
   private readonly planksPerWindow: number;
   private readonly props: Props;
   private readonly effects: Effects;
+  /** Grupo de cada zona: se muestra solo si se puede ver desde donde está el jugador. */
+  private readonly zoneGroups = new Map<string, THREE.Group>();
+  private readonly map: MapConfig;
+  private readonly snow: Snow[] = [];
+  private readonly tower: RadioTower | null = null;
   private time = 0;
   /** Cuánto se ha cerrado la niebla por La Jauría, de 0 a 1. */
   private packFog = 0;
@@ -142,6 +168,7 @@ export class GameView {
   private landKick = 0;
 
   constructor(map: MapConfig, poolSize: number) {
+    this.map = map;
     this.scene.background = new THREE.Color(COLORS.sky);
     this.scene.fog = new THREE.Fog(COLORS.sky, 6, FOG_FAR);
     this.camera.rotation.order = 'YXZ';
@@ -152,29 +179,46 @@ export class GameView {
     const moon = new THREE.DirectionalLight(0xa9c2e8, 0.9);
     moon.position.set(-6, 14, -8);
     this.scene.add(moon);
-    const hall = new THREE.PointLight(0xffc98a, 14, 14, 1.6);
-    hall.position.set(map.playerStart.position[0], 2.9, map.playerStart.position[2] - 1);
-    this.scene.add(hall);
+    // Suelo de fuera: nieve en la oscuridad.
+    this.scene.add(new THREE.Mesh(boxesGeometry([map.floor]), new THREE.MeshLambertMaterial({ map: snowTexture(), color: 0x6c7480 })));
 
-    // Suelo.
-    this.scene.add(new THREE.Mesh(boxesGeometry([map.floor]), new THREE.MeshStandardMaterial({ color: COLORS.floor, roughness: 1 })));
-
-    // Muros, alféizares y dinteles en una sola malla.
+    // Muros, alféizares y dinteles, repartidos por zonas.
     const walls: Box[] = [...map.walls];
     for (const w of map.windows) {
       const [x0, z0, x1, z1] = w.opening;
       walls.push([x0, 0, z0, x1, map.sillHeight, z1], [x0, map.windowTop, z0, x1, map.wallHeight, z1]);
     }
-    const [hallWalls, labWalls] = splitAtLab(walls, map.labArea[0]);
-    this.scene.add(new THREE.Mesh(boxesGeometry(hallWalls), new THREE.MeshStandardMaterial({ color: COLORS.wall, roughness: 0.9 })));
-    this.scene.add(new THREE.Mesh(boxesGeometry(labWalls), new THREE.MeshStandardMaterial({ map: labWallTexture(), roughness: 0.75, metalness: 0.15 })));
-    // Suelo de baldosas del Laboratorio, apenas por encima del suelo general.
-    this.scene.add(
-      new THREE.Mesh(
-        boxesGeometry([[map.labArea[0], 0, map.labArea[1], map.labArea[2], 0.004, map.labArea[3]]]),
-        new THREE.MeshStandardMaterial({ map: labFloorTexture(), roughness: 0.85 }),
-      ),
-    );
+    // Los bordes del mapa se amplían un poco para que los muros exteriores caigan dentro de su zona.
+    const minX = Math.min(...map.zones.map((z) => z.area[0]));
+    const minZ = Math.min(...map.zones.map((z) => z.area[1]));
+    const maxX = Math.max(...map.zones.map((z) => z.area[2]));
+    const maxZ = Math.max(...map.zones.map((z) => z.area[3]));
+    const grow = (v: number, edge: number, d: number) => (v === edge ? v + d : v);
+    for (const zone of map.zones) {
+      const [x0, z0, x1, z1] = zone.area;
+      const clip: [number, number, number, number] = [grow(x0, minX, -1), grow(z0, minZ, -1), grow(x1, maxX, 1), grow(z1, maxZ, 1)];
+      const look = zoneLook(zone.id);
+      const group = new THREE.Group();
+      group.name = zone.id;
+      const mine = walls.map((b) => clipToZone(b, clip)).filter((b): b is Box => b !== null);
+      group.add(new THREE.Mesh(boxesGeometry(mine), look.wall));
+      group.add(new THREE.Mesh(boxesGeometry([[x0, 0, z0, x1, 0.004, z1]]), look.floor));
+      if (zone.roofed) group.add(new THREE.Mesh(boxesGeometry([[x0, map.wallHeight, z0, x1, map.wallHeight + 0.15, z1]]), look.ceiling));
+      this.zoneGroups.set(zone.id, group);
+      this.scene.add(group);
+    }
+
+    // Al aire libre: nieve en las zonas sin techo y la torre de radio, que se ve por encima de los muros.
+    for (const zone of map.zones) {
+      if (zone.roofed) continue;
+      const snow = new Snow(zone.area);
+      this.snow.push(snow);
+      this.zoneGroups.get(zone.id)!.add(snow.mesh);
+    }
+    if (map.radioTower) {
+      this.tower = new RadioTower(map);
+      this.scene.add(this.tower.root);
+    }
 
     // Compuertas.
     const doorMat = new THREE.MeshStandardMaterial({ color: COLORS.door, roughness: 0.6, metalness: 0.2 });
@@ -198,7 +242,7 @@ export class GameView {
       // El ancla está delante del muro; el panel va pegado a él.
       group.position.set(b.anchor[0] - b.facing[0] * 0.66, 1.5, b.anchor[1] - b.facing[1] * 0.66);
       group.rotation.y = Math.atan2(b.facing[0], b.facing[1]);
-      this.scene.add(group);
+      this.attach(group, b.anchor[0], b.anchor[1]);
     }
 
     // Planchas de las ventanas: todas en una malla instanciada.
@@ -240,8 +284,42 @@ export class GameView {
 
     this.viewmodel = new Viewmodel(this.camera);
     this.scene.add(this.muzzleLight);
-    this.props = new Props(this.scene, map);
+    this.props = new Props(this.scene, map, (o, x, z) => this.attach(o, x, z));
     this.effects = new Effects(this.scene);
+  }
+
+  /** Mete un objeto en el grupo de la zona donde está; si no cae en ninguna, en la escena. */
+  private attach(o: THREE.Object3D, x: number, z: number): void {
+    const zone = zoneAt(this.map, x, z);
+    (zone ? this.zoneGroups.get(zone.id) : undefined)?.add(o) ?? this.scene.add(o);
+  }
+
+  /**
+   * Zonas que se pueden ver: la del jugador y las que se ven por compuertas abiertas,
+   * hasta dos zonas más allá. Fuera del edificio, todas.
+   */
+  private visibleZones(game: Game, here: ZoneDef | null): Set<string> | null {
+    if (!here) return null;
+    const seen = new Set<string>([here.id]);
+    let frontier = [here.id];
+    for (let depth = 0; depth < 2; depth++) {
+      const next: string[] = [];
+      this.map.doors.forEach((d, i) => {
+        if (!game.doors[i]!.open) return;
+        const [a, b] = d.connects;
+        for (const [from, to] of [
+          [a, b],
+          [b, a],
+        ] as const) {
+          if (frontier.includes(from) && !seen.has(to)) {
+            seen.add(to);
+            next.push(to);
+          }
+        }
+      });
+      frontier = next;
+    }
+    return seen;
   }
 
   resize(width: number, height: number): void {
@@ -326,6 +404,12 @@ export class GameView {
     fog.far = FOG_FAR + (PACK_FOG_FAR - FOG_FAR) * this.packFog;
     fog.color.setHex(COLORS.sky).lerp(PACK_FOG_COLOR, this.packFog);
     (this.scene.background as THREE.Color).copy(fog.color);
+
+    // Solo se dibujan las zonas que se pueden ver.
+    const visible = this.visibleZones(game, zoneAt(this.map, this.camera.position.x, this.camera.position.z));
+    for (const [id, group] of this.zoneGroups) group.visible = !visible || visible.has(id);
+    for (const snow of this.snow) snow.update(frameSeconds, this.time, yaw);
+    this.tower?.update(this.time);
 
     this.enemyViews.update(game, alpha, frameSeconds);
 

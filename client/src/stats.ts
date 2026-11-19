@@ -3,6 +3,7 @@
  * jugadores»): cuándo compra por primera vez, cuánto dura cada ronda, puntos
  * ganados y gastados, puntería y qué le derribó. Solo se enseña con ?pruebas.
  */
+import { zoneAt } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { SIM_DT } from '../../shared/sim/fixedStep';
 import type { SimEvent } from '../../shared/sim/types';
@@ -36,7 +37,8 @@ export interface Summary {
   /** Dónde estaba el Vacío del último golpe: dentro, en la ventana o null si nadie golpeó. */
   lastHitFrom: 'dentro' | 'ventana' | null;
   /** Zona del jugador al caer. */
-  lastZone: 'vestibulo' | 'laboratorio' | null;
+  /** Zona donde recibió el último golpe (id de zona del mapa). */
+  lastZone: string | null;
 }
 
 export class PlayStats {
@@ -108,7 +110,7 @@ export class PlayStats {
         this.hitsTaken++;
         const e = game.enemies[ev.enemy];
         this.lastHitFrom = e ? (e.phase === 'chasing' ? 'dentro' : 'ventana') : null;
-        this.lastZone = game.player.pos.x < game.cfg.map.labArea[0] ? 'vestibulo' : 'laboratorio';
+        this.lastZone = zoneAt(game.cfg.map, game.player.pos.x, game.player.pos.z)?.id ?? null;
         break;
       }
       case 'downed':

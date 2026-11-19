@@ -27,6 +27,13 @@ describe('jugador automático', () => {
     expect(report.doorOpened).toBe(true);
   }, 300_000);
 
+  it('con toda la Estación Aurora abierta, llegan desde todas las zonas sin atascarse', () => {
+    const report = runBot(loadConfig(), { rounds: 15, openAll: true });
+    expect(report.problems).toEqual([]);
+    expect(report.roundsCompleted).toBe(15);
+    expect(report.kills).toBe(report.spawned);
+  }, 300_000);
+
   it('el mapa de prueba amplio también se juega 20 rondas sin atascos', () => {
     const report = runBot(loadConfig('amplio'), { rounds: 20 });
     expect(report.problems).toEqual([]);

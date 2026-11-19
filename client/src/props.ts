@@ -4,7 +4,7 @@
  * Todo se crea al arrancar; durante la partida solo se mueve, se muestra o se oculta.
  */
 import * as THREE from 'three/webgpu';
-import type { Fixture, MapConfig } from '../../shared/config';
+import type { Box, Fixture, MapConfig } from '../../shared/config';
 import type { Game } from '../../shared/sim/game';
 import { placeModel } from './models';
 import { WEAPON_IDS, buildWeapon } from './weapons/build';
@@ -29,6 +29,11 @@ function tint(model: THREE.Object3D, color: number): THREE.Object3D {
   return model;
 }
 const FALLBACK = 0x6d757e;
+/** Luz de emergencia de las zonas sin energía, y la de después. */
+const EMERGENCY = 0xff2a1a;
+const EMERGENCY_INTENSITY = 6;
+const POWERED = 0xfff1d6;
+const POWERED_INTENSITY = 22;
 /** Cada cuánto cambia el arma mientras gira El Contenedor. */
 const SPIN_SWAP_SECONDS = 0.12;
 
@@ -71,26 +76,32 @@ export class Props {
   private readonly forjaGlow: THREE.Mesh;
   private readonly perkGlows: Array<{ perk: string; mesh: THREE.Mesh }> = [];
   private readonly powerLamp: THREE.Mesh;
-  private readonly labLights: THREE.PointLight[] = [];
+  /** Luces de las zonas que dependen de la energía: emergencia roja hasta que llega. */
+  private readonly zoneLights: THREE.PointLight[] = [];
   private readonly map: MapConfig;
   private spinPick = 0;
   private spinTimer = 0;
   private powerShown = false;
 
-  constructor(scene: THREE.Scene, map: MapConfig) {
+  /**
+   * `attach` mete cada objeto en el grupo de su zona (para no dibujar las zonas que no se ven).
+   * Las luces van siempre en la escena: quitarlas o ponerlas obligaría a rehacer los sombreadores.
+   */
+  constructor(scene: THREE.Scene, map: MapConfig, attach: (o: THREE.Object3D, x: number, z: number) => void) {
     this.map = map;
-    for (const d of map.decor) scene.add(placeModel(d.model, d.box, d.facing, FALLBACK));
+    const at = (o: THREE.Object3D, box: Box) => attach(o, (box[0] + box[3]) / 2, (box[2] + box[5]) / 2);
+    for (const d of map.decor) at(placeModel(d.model, d.box, d.facing, FALLBACK), d.box);
     const ps = map.powerSwitch;
-    scene.add(placeModel(ps.model, ps.box, ps.facing, 0x8a8f2a));
+    at(placeModel(ps.model, ps.box, ps.facing, 0x8a8f2a), ps.box);
     for (const st of map.perkStations) {
       const m = placeModel(st.model, st.box, st.facing, PERK_GLOW[st.perk] ?? FALLBACK);
-      scene.add(PERK_TINTED.has(st.perk) ? tint(m, PERK_GLOW[st.perk]!) : m);
+      at(PERK_TINTED.has(st.perk) ? tint(m, PERK_GLOW[st.perk]!) : m, st.box);
     }
-    scene.add(placeModel(map.forja.model, map.forja.box, map.forja.facing, 0x5a3a2a));
+    at(placeModel(map.forja.model, map.forja.box, map.forja.facing, 0x5a3a2a), map.forja.box);
     for (const spot of map.contenedorSpots) {
       const m = placeModel(spot.model, spot.box, spot.facing, 0x56603a);
       this.boxModels.push(m);
-      scene.add(m);
+      at(m, spot.box);
     }
 
     // Brillo de cada estación de suero: una esfera que se enciende cuando se puede comprar.
@@ -100,13 +111,13 @@ export class Props {
       const [x0, , z0, x1, y1, z1] = st.box;
       mesh.position.set((x0 + x1) / 2 + st.facing[0] * ((x1 - x0) / 2 + 0.05), y1 + 0.1, (z0 + z1) / 2 + st.facing[1] * ((z1 - z0) / 2 + 0.05));
       this.perkGlows.push({ perk: st.perk, mesh });
-      scene.add(mesh);
+      at(mesh, st.box);
     }
 
     // Piloto del panel de energía: rojo apagado, verde encendido.
     this.powerLamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff3020 }));
     this.powerLamp.position.copy(anchorTop(ps)).add(new THREE.Vector3(0, 0.15, 0));
-    scene.add(this.powerLamp);
+    at(this.powerLamp, ps.box);
 
     // La Forja brilla mientras trabaja.
     this.forjaGlow = new THREE.Mesh(
@@ -114,23 +125,19 @@ export class Props {
       new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0, depthWrite: false }),
     );
     this.forjaGlow.position.copy(anchorTop(map.forja)).add(new THREE.Vector3(map.forja.facing[0] * 0.4, -0.5, map.forja.facing[1] * 0.4));
-    scene.add(this.forjaGlow);
+    at(this.forjaGlow, map.forja.box);
 
     this.boxDisplay = new WeaponDisplay(scene);
     this.forjaDisplay = new WeaponDisplay(scene);
 
-    // Luces del Laboratorio: emergencia roja hasta que llega la energía.
-    const [lx0, lz0, lx1, lz1] = map.labArea;
-    for (const [fx, fz] of [
-      [0.25, 0.17],
-      [0.75, 0.83],
-    ] as const) {
-      const x = lx0 + (lx1 - lx0) * fx;
-      const z = lz0 + (lz1 - lz0) * fz;
-      const l = new THREE.PointLight(0xff2a1a, 6, 14, 1.6);
-      l.position.set(x, 2.9, z);
-      this.labLights.push(l);
-      scene.add(l);
+    // Luces de cada zona. La de inicio, cálida siempre; las demás, de emergencia roja hasta que llega la energía.
+    for (const zone of map.zones) {
+      for (const [x, z] of zone.lights) {
+        const l = zone.startsOpen ? new THREE.PointLight(0xffc98a, 14, 14, 1.6) : new THREE.PointLight(EMERGENCY, EMERGENCY_INTENSITY, 14, 1.6);
+        l.position.set(x, zone.roofed ? 2.9 : 4.5, z);
+        if (!zone.startsOpen) this.zoneLights.push(l);
+        scene.add(l);
+      }
     }
   }
 
@@ -141,9 +148,9 @@ export class Props {
     if (game.power !== this.powerShown) {
       this.powerShown = game.power;
       (this.powerLamp.material as THREE.MeshBasicMaterial).color.setHex(game.power ? 0x40ff60 : 0xff3020);
-      for (const l of this.labLights) {
-        l.color.setHex(game.power ? 0xfff1d6 : 0xff2a1a);
-        l.intensity = game.power ? 22 : 6;
+      for (const l of this.zoneLights) {
+        l.color.setHex(game.power ? POWERED : EMERGENCY);
+        l.intensity = game.power ? POWERED_INTENSITY : EMERGENCY_INTENSITY;
       }
     }
 

@@ -318,6 +318,43 @@ export interface WindowDef {
   spawn: Point2;
 }
 
+/** Una zona del mapa: su rectángulo en planta, si tiene techo y dónde van sus luces. */
+export interface ZoneDef {
+  id: string;
+  startsOpen: boolean;
+  /** [minX, minZ, maxX, maxZ], con los muros que la rodean en sus bordes. */
+  area: [number, number, number, number];
+  roofed: boolean;
+  lights: Point2[];
+}
+
+/** Zona en la que cae un punto del suelo, o null si está fuera del edificio. */
+export function zoneAt(map: MapConfig, x: number, z: number): ZoneDef | null {
+  for (const zn of map.zones) {
+    const [x0, z0, x1, z1] = zn.area;
+    if (x >= x0 && x < x1 && z >= z0 && z < z1) return zn;
+  }
+  return null;
+}
+
+/** Cajas sólidas de las patas de la torre de radio. */
+export function towerLegs(map: MapConfig): Box[] {
+  const t = map.radioTower;
+  if (!t) return [];
+  const [cx, cz] = t.center;
+  const h = t.leg / 2;
+  return [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ].map(([sx, sz]) => {
+    const x = cx + sx! * t.half;
+    const z = cz + sz! * t.half;
+    return [x - h, 0, z - h, x + h, 3.2, z + h] as Box;
+  });
+}
+
 export interface MapConfig {
   name: string;
   wallHeight: number;
@@ -327,9 +364,10 @@ export interface MapConfig {
   floor: Box;
   walls: Box[];
   windows: WindowDef[];
-  doors: Array<{ id: string; cost: number; box: Box; anchors: Point2[]; opensZone: string }>;
+  /** Compuertas de pago: cada una une dos zonas y, al abrirla, abre las dos. */
+  doors: Array<{ id: string; cost: number; box: Box; anchors: Point2[]; connects: [string, string] }>;
   wallBuys: Array<{ id: string; weapon: string; cost: number; anchor: Point2; facing: Point2 }>;
-  zones: Array<{ id: string; startsOpen: boolean }>;
+  zones: ZoneDef[];
   playerStart: { position: [number, number, number]; yaw: number };
   navFloors: Array<[number, number, number, number]>;
   powerSwitch: Fixture;
@@ -337,8 +375,10 @@ export interface MapConfig {
   forja: Fixture;
   contenedorSpots: Fixture[];
   decor: Decor[];
-  /** Zona con arte final (el Laboratorio): [minX, minZ, maxX, maxZ]. */
+  /** Área del Laboratorio: [minX, minZ, maxX, maxZ] (sale de su zona). */
   labArea: [number, number, number, number];
+  /** Torre de radio: patas sólidas y la estructura que se ve de lejos. */
+  radioTower: { center: Point2; half: number; leg: number; height: number } | null;
 }
 
 /** Objeto fijo con el que se interactúa: punto de uso, hacia dónde mira y su caja sólida. */
@@ -378,7 +418,14 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
   const o = obj(raw, w);
   const zones = arr(o, 'zones', w).map((z, i) => {
     const zo = obj(z, `${w}.zones[${i}]`);
-    return { id: str(zo, 'id', `${w}.zones[${i}]`), startsOpen: bool(zo, 'startsOpen', `${w}.zones[${i}]`) };
+    const zw = `${w}.zones[${i}]`;
+    return {
+      id: str(zo, 'id', zw),
+      startsOpen: bool(zo, 'startsOpen', zw),
+      area: nums(zo.area, 4, `${zw}.area`) as ZoneDef['area'],
+      roofed: bool(zo, 'roofed', zw),
+      lights: arr(zo, 'lights', zw).map((l, j) => nums(l, 2, `${zw}.lights[${j}]`) as Point2),
+    };
   });
   const zoneIds = zones.map((z) => z.id);
   if (!zones.some((z) => z.startsOpen)) throw new DataError(`${w}.zones: al menos una zona debe empezar abierta`);
@@ -404,7 +451,14 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       cost: num(d, 'cost', dw, { int: true }),
       box: boxOf(d.box, `${dw}.box`),
       anchors: arr(d, 'anchors', dw).map((a, j) => nums(a, 2, `${dw}.anchors[${j}]`) as Point2),
-      opensZone: str(d, 'opensZone', dw, zoneIds),
+      connects: (() => {
+        const c = arr(d, 'connects', dw);
+        if (c.length !== 2) throw new DataError(`${dw}.connects: una compuerta une exactamente dos zonas`);
+        return c.map((z, j) => {
+          if (typeof z !== 'string' || !zoneIds.includes(z)) throw new DataError(`${dw}.connects[${j}]: zona desconocida`);
+          return z;
+        }) as [string, string];
+      })(),
     };
   });
 
@@ -438,7 +492,17 @@ export function parseMap(raw: unknown, weapons: Record<string, WeaponConfig>): M
       yaw: num(ps, 'yaw', `${w}.playerStart`, { min: -Math.PI * 2, max: Math.PI * 2 }),
     },
     navFloors: arr(o, 'navFloors', w).map((r, i) => nums(r, 4, `${w}.navFloors[${i}]`) as [number, number, number, number]),
-    labArea: nums(o.labArea, 4, `${w}.labArea`) as [number, number, number, number],
+    labArea: (() => {
+      const lab = zones.find((z) => z.id === 'laboratorio');
+      if (!lab) throw new DataError(`${w}.zones: falta el Laboratorio`);
+      return lab.area;
+    })(),
+    radioTower: (() => {
+      if (!('radioTower' in o)) return null;
+      const tw = `${w}.radioTower`;
+      const t = obj(o.radioTower, tw);
+      return { center: nums(t.center, 2, `${tw}.center`) as Point2, half: num(t, 'half', tw), leg: num(t, 'leg', tw), height: num(t, 'height', tw) };
+    })(),
     powerSwitch: fixture(o.powerSwitch, `${w}.powerSwitch`),
     perkStations: arr(o, 'perkStations', w).map((x, i) => ({
       ...fixture(x, `${w}.perkStations[${i}]`),

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import rawPlayer from './data/player.json';
 import rawWeapons from './data/weapons.json';
 import rawMap from './data/maps/prototipo.json';
-import { enemySpeed, loadConfig, parseMap, parsePlayer, parseWeapons } from './config';
+import { enemySpeed, loadConfig, parseMap, parsePlayer, parseWeapons, zoneAt } from './config';
 
 const cfg = loadConfig();
 
@@ -73,13 +73,49 @@ describe('datos de balance', () => {
     expect(cfg.powerups).toMatchObject({ effectSeconds: 30, kinds: ['municionCompleta', 'bajaInstantanea', 'puntosDobles', 'ondaExpansiva'] });
   });
 
-  it('fase 2: Segundo aliento en el Vestíbulo, Coraza y El Contenedor en el Laboratorio', () => {
-    const inVestibulo = (x: number) => x < 12;
-    const station = (perk: string) => cfg.map.perkStations.find((p) => p.perk === perk)!;
-    expect(inVestibulo(station('segundoAliento').anchor[0])).toBe(true);
-    expect(inVestibulo(station('coraza').anchor[0])).toBe(false);
-    for (const spot of cfg.map.contenedorSpots) expect(inVestibulo(spot.anchor[0])).toBe(false);
-    expect(inVestibulo(cfg.map.forja.anchor[0])).toBe(false);
-    expect(inVestibulo(cfg.map.powerSwitch.anchor[0])).toBe(false);
+  it('cada compra en su zona, como en el GDD', () => {
+    const zone = (p: [number, number]) => zoneAt(cfg.map, p[0], p[1])?.id;
+    const station = (perk: string) => cfg.map.perkStations.find((p) => p.perk === perk)!.anchor;
+    const buy = (weapon: string) => cfg.map.wallBuys.find((b) => b.weapon === weapon)!.anchor;
+    expect(zone(station('segundoAliento'))).toBe('vestibulo');
+    expect(zone(station('coraza'))).toBe('laboratorio');
+    expect(zone(station('pulso'))).toBe('patio');
+    expect(zone(station('dobleFilo'))).toBe('energia');
+    expect(zone(cfg.map.powerSwitch.anchor)).toBe('energia');
+    expect(zone(cfg.map.forja.anchor)).toBe('torre');
+    expect(zone(buy('m870'))).toBe('vestibulo');
+    expect(zone(buy('smg5'))).toBe('vestibulo');
+    expect(zone(buy('v45'))).toBe('laboratorio');
+    expect(zone(buy('ak74'))).toBe('almacen');
+    expect(zone(buy('m16'))).toBe('patio');
+    // El Contenedor: empieza en el Almacén; un hueco por zona que no es la de inicio ni la de energía.
+    expect(cfg.map.contenedorSpots.map((s) => zone(s.anchor))).toEqual(['almacen', 'laboratorio', 'patio', 'torre']);
+  });
+
+  it('el mapa de la Estación Aurora: seis zonas, siete compuertas que suman 7.500 y energía a 1.750', () => {
+    const m = cfg.map;
+    expect(m.zones.map((z) => z.id).sort()).toEqual(['almacen', 'energia', 'laboratorio', 'patio', 'torre', 'vestibulo']);
+    expect(m.doors.length).toBe(7);
+    expect(m.doors.reduce((a, d) => a + d.cost, 0)).toBe(7500);
+    // Camino más barato del Vestíbulo a la Sala de energía.
+    const cost = new Map<string, number>([['vestibulo', 0]]);
+    for (let k = 0; k < 6; k++) {
+      for (const d of m.doors) {
+        const [a, b] = d.connects;
+        for (const [from, to] of [[a, b], [b, a]] as const) {
+          const c = cost.get(from);
+          if (c !== undefined && (cost.get(to) ?? Infinity) > c + d.cost) cost.set(to, c + d.cost);
+        }
+      }
+    }
+    expect(cost.get('energia')).toBe(1750);
+    // Cada zona tiene de dos a cuatro entradas de enemigos.
+    for (const z of m.zones) {
+      const n = m.windows.filter((w) => w.zone === z.id).length;
+      expect(n, z.id).toBeGreaterThanOrEqual(2);
+      expect(n, z.id).toBeLessThanOrEqual(4);
+    }
+    // Al aire libre: el Patio y la Torre de radio, que asoma por encima de todo.
+    expect(m.zones.filter((z) => !z.roofed).map((z) => z.id)).toEqual(['patio', 'torre']);
   });
 });

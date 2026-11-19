@@ -2,7 +2,7 @@
  * Mundo físico (Rapier): muros, ventanas, puertas, el jugador y las cápsulas
  * de impacto de los enemigos. Los disparos son rayos instantáneos.
  */
-import type { Box, Fixture, MapConfig } from '../config';
+import { towerLegs, type Box, type Fixture, type MapConfig } from '../config';
 import { RAPIER } from './libs';
 import type { HitPart, Vec3 } from './types';
 
@@ -63,7 +63,7 @@ export function fixtures(map: MapConfig): Fixture[] {
 
 /** Todas las cajas sólidas que no son muros: objetos de uso y decorado. */
 export function solidBoxes(map: MapConfig): Box[] {
-  return [...fixtures(map).map((f) => f.box), ...map.decor.map((d) => d.box)];
+  return [...fixtures(map).map((f) => f.box), ...map.decor.map((d) => d.box), ...towerLegs(map)];
 }
 
 function cuboid(world: World, b: Box, g: number): Collider {

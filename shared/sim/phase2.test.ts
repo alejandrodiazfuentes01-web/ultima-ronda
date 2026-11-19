@@ -312,10 +312,12 @@ describe('El Contenedor', () => {
     run(g, seconds(14.5));
     expect(g.contenedor.phase).toBe('moving');
     const moved = run(g, seconds(1));
-    expect(moved).toContainEqual({ type: 'contenedorMoved', spot: 1 });
-    expect(g.contenedor.spot).toBe(1);
+    const to = moved.find((e) => e.type === 'contenedorMoved') as { spot: number } | undefined;
+    expect(to).toBeDefined();
+    expect(to!.spot).not.toBe(0);
+    expect(g.contenedor.spot).toBe(to!.spot);
     expect(g.contenedor.uses).toBe(0);
-    const [x2, z2] = spot(1);
+    const [x2, z2] = spot(to!.spot);
     g.teleportPlayer(x2, z2);
     run(g, 1);
     expect(g.prompt).toEqual({ kind: 'buyContenedor', cost: 950 });
